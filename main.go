@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"flag"
 	"log"
 	"net/http"
@@ -87,8 +86,13 @@ func connWriter(conn *websocket.Conn, outgoing <-chan []byte, stopSignal chan st
 	}
 }
 
+// TODO: don't stop the game when some player (even both) disconnects
+// but just wait some time and if nothing happens *then* stop it.
+
 func runServer() {
 	flag.Parse()
+
+	go aiHub.run()
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/" {
@@ -116,7 +120,8 @@ func runServer() {
 		go connReader(conn, incoming, stopSignal)
 		go connWriter(conn, outgoing, stopSignal)
 
-		handleFirstAction(incoming, outgoing, stopSignal)
+		cli := client{incoming, outgoing, stopSignal}
+		cli.handleFirstMessage()
 	})
 
 	httpServer := &http.Server{
@@ -131,48 +136,4 @@ func runServer() {
 
 func main() {
 	runServer()
-}
-
-func trySend(outgoing chan<- []byte, v any) {
-	bytes, err := json.Marshal(v)
-	log.Printf("trying to send %q, err %v\n", string(bytes), err)
-	if err == nil {
-		outgoing <- bytes
-	}
-}
-
-func handleFirstAction(incoming <-chan []byte, outgoing chan<- []byte, stopSignal chan struct{}) {
-	timer := time.NewTimer(1 * time.Minute)
-	defer timer.Stop()
-outer:
-	for {
-		select {
-		case <-timer.C:
-			break outer
-		case bytes, ok := <-incoming:
-			if !ok {
-				break outer
-			}
-			envelope := messageEnvelope{}
-			if err := json.Unmarshal(bytes, &envelope); err != nil {
-				trySend(outgoing, errorMessage("invalid message format: "+err.Error()))
-				continue
-			}
-			switch envelope.T {
-			case "new-game":
-				trySend(outgoing, errorMessage("unimplemented"))
-				break outer
-			case "join-game":
-				trySend(outgoing, errorMessage("unimplemented"))
-				break outer
-			case "reconnect-to-game":
-				trySend(outgoing, errorMessage("unimplemented"))
-				break outer
-			default:
-				trySend(outgoing, errorMessage("invalid message type at this point (first message)"))
-				continue
-			}
-		}
-	}
-	close(stopSignal)
 }
