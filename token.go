@@ -5,10 +5,8 @@ import (
 	"encoding/hex"
 )
 
-type token string
-
-func newToken() token {
+func newToken() string {
 	bytes := [48]byte{}
 	rand.Reader.Read(bytes[:])
-	return token(hex.EncodeToString(bytes[:]))
+	return hex.EncodeToString(bytes[:])
 }

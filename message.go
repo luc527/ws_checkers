@@ -31,7 +31,7 @@ type newAIGameMessageData struct {
 	Heuristic         string `json:"heuristic,omitempty"`
 }
 
-type newAIGameMessage struct {
+type newMachGameMessage struct {
 	captureRule core.CaptureRule
 	bestRule    core.BestRule
 	timeLimit   time.Duration
@@ -50,7 +50,7 @@ func errorMessage(err string) stringMessage {
 	}
 }
 
-func parseNewAIGameMessage(msg messageEnvelope) (*newAIGameMessage, error) {
+func parseNewMachGameMessage(msg messageEnvelope) (*newMachGameMessage, error) {
 	data := newAIGameMessageData{}
 	if msg.Raw == nil {
 		return nil, fmt.Errorf("new game message: no data")
@@ -80,7 +80,7 @@ func parseNewAIGameMessage(msg messageEnvelope) (*newAIGameMessage, error) {
 		}
 	}
 
-	newGameMsg := newAIGameMessage{
+	newGameMsg := newMachGameMessage{
 		captureRule: captureRule,
 		bestRule:    bestRule,
 		timeLimit:   timeLimit,

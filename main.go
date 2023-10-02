@@ -92,7 +92,7 @@ func connWriter(conn *websocket.Conn, outgoing <-chan []byte, stopSignal chan st
 func runServer() {
 	flag.Parse()
 
-	go aiHub.run()
+	go theMachHub.run()
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/" {

@@ -8,7 +8,7 @@ import (
 )
 
 var (
-	aiHub = newAIHub()
+	theMachHub = newMachHub()
 )
 
 type client struct {
@@ -29,10 +29,10 @@ func (c *client) trySend(v any) {
 	}
 }
 
-func (c *client) sendStr(f string, a ...any) {
+func (c *client) sendStr(t string, f string, a ...any) {
 	s := fmt.Sprintf(f, a...)
 	c.trySend(stringMessage{
-		T:    "test",
+		T:    t,
 		Text: s,
 	})
 }
@@ -60,20 +60,20 @@ outer:
 				c.sendErr("invalid message format %v", err)
 				continue
 			}
+			fmt.Printf("envelope.T: %v\n", envelope.T)
 			switch envelope.T {
-
-			case "ai/new":
-				msg, err := parseNewAIGameMessage(envelope)
+			case "mach/new":
+				msg, err := parseNewMachGameMessage(envelope)
 				if err != nil {
 					c.sendErr("invalid format: %v", err)
 					continue
 				}
-				c.handleNewAIGame(msg)
+				c.handleNewMachGame(msg)
 				return
-			case "ai/join":
+			case "mach/join":
 				c.sendErr("unimplemented")
 				break outer
-			case "ai/reconnect":
+			case "mach/reconnect":
 				c.sendErr("unimplemented")
 				break outer
 			case "pvp/new":
@@ -94,15 +94,16 @@ outer:
 	c.close()
 }
 
-func (c *client) handleNewAIGame(msg *newAIGameMessage) {
-	req := newRequest[*newAIGameMessage, token](msg)
-	aiHub.register <- req
+func (c *client) handleNewMachGame(msg *newMachGameMessage) {
+	fmt.Printf("handleNewMachGame %v\n", msg)
+	req := newRequest[*newMachGameMessage, newMachGameResponse](msg)
+	theMachHub.register <- req
 	select {
-	case token := <-req.response:
-		c.sendStr("token: %v", token)
+	case res := <-req.response:
+		fmt.Printf("res: %v\n", res)
+		c.sendStr("test", "token: "+res.token+", id: "+res.id.String())
 	case err := <-req.err:
+		fmt.Printf("err: %v\n", err)
 		c.sendErr("internal")
-		log.Printf("new game: %v\n", err)
-		c.close()
 	}
 }
