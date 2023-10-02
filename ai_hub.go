@@ -7,7 +7,7 @@ import (
 )
 
 type AIHub struct {
-	register chan *request[*newGameMessage, token]
+	register chan *request[*newAIGameMessage, token]
 }
 
 type AIGame struct {
@@ -19,7 +19,7 @@ type AIGame struct {
 
 func newAIHub() *AIHub {
 	return &AIHub{
-		register: make(chan *request[*newGameMessage, token]),
+		register: make(chan *request[*newAIGameMessage, token]),
 	}
 }
 
@@ -31,8 +31,8 @@ func (hub *AIHub) run() {
 			g := core.NewGame(msg.captureRule, msg.bestRule)
 			ai := minimax.TimeLimitedSearcher{
 				ToMax:     core.BlackColor,
-				Heuristic: msg.aiHeuristic,
-				TimeLimit: msg.aiTimeLimit,
+				Heuristic: msg.heuristic,
+				TimeLimit: msg.timeLimit,
 			}
 			token := newToken()
 			id, err := uuid.NewRandom()

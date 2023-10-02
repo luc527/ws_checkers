@@ -9,31 +9,6 @@ import (
 	"github.com/luc527/go_checkers/minimax"
 )
 
-type against byte
-
-const (
-	againstHuman = against(iota)
-	againstAI
-)
-
-func (a against) ai() bool {
-	return a == againstAI
-}
-
-func (a against) human() bool {
-	return a == againstHuman
-}
-
-func parseAgainst(a string) (against, bool) {
-	if a == "human" {
-		return againstHuman, true
-	}
-	if a == "ai" {
-		return againstAI, true
-	}
-	return 0, false
-}
-
 func parseHeuristic(h string) (minimax.Heuristic, bool) {
 	if h == "unweightedCount" {
 		return minimax.UnweightedCountHeuristic, true
@@ -49,20 +24,18 @@ type messageEnvelope struct {
 	Raw *json.RawMessage `json:"data"`
 }
 
-type newGameMessageData struct {
-	Against           string `json:"against"`
+type newAIGameMessageData struct {
 	CapturesMandatory bool   `json:"capturesMandatory"`
 	BestMandatory     bool   `json:"bestMandatory"`
-	AITimeLimitMs     int    `json:"aiTimeLimitMs,omitempty"`
-	AIHeuristic       string `json:"aiHeuristic,omitempty"`
+	TimeLimitMs       int    `json:"timeLimitMs,omitempty"`
+	Heuristic         string `json:"heuristic,omitempty"`
 }
 
-type newGameMessage struct {
-	against
+type newAIGameMessage struct {
 	captureRule core.CaptureRule
 	bestRule    core.BestRule
-	aiTimeLimit time.Duration
-	aiHeuristic minimax.Heuristic
+	timeLimit   time.Duration
+	heuristic   minimax.Heuristic
 }
 
 type stringMessage struct {
@@ -77,8 +50,8 @@ func errorMessage(err string) stringMessage {
 	}
 }
 
-func parseNewGameMessage(msg messageEnvelope) (*newGameMessage, error) {
-	data := newGameMessageData{}
+func parseNewAIGameMessage(msg messageEnvelope) (*newAIGameMessage, error) {
+	data := newAIGameMessageData{}
 	if msg.Raw == nil {
 		return nil, fmt.Errorf("new game message: no data")
 	}
@@ -86,39 +59,32 @@ func parseNewGameMessage(msg messageEnvelope) (*newGameMessage, error) {
 		return nil, err
 	}
 
-	against, ok := parseAgainst(data.Against)
-	if !ok {
-		return nil, fmt.Errorf("new game message: invalid 'against' value %q", data.Against)
-	}
-
 	captureRule := core.CaptureRule(data.CapturesMandatory)
 	bestRule := core.BestRule(data.BestMandatory)
 
-	var aiTimeLimit time.Duration
-	var aiHeuristic minimax.Heuristic
+	var timeLimit time.Duration
+	var heuristic minimax.Heuristic
 
-	if against.ai() {
-		aiTimeLimit = 3 * time.Second
-		aiHeuristic = minimax.WeightedCountHeuristic
+	timeLimit = 3 * time.Second
+	heuristic = minimax.WeightedCountHeuristic
 
-		if data.AITimeLimitMs > 0 {
-			aiTimeLimit = time.Duration(data.AITimeLimitMs * int(time.Millisecond))
-		}
+	if data.TimeLimitMs > 0 {
+		timeLimit = time.Duration(data.TimeLimitMs * int(time.Millisecond))
+	}
 
-		if data.AIHeuristic != "" {
-			aiHeuristic, ok = parseHeuristic(data.AIHeuristic)
-			if !ok {
-				return nil, fmt.Errorf("new game message: invalid 'aiHeuristic' value %q", data.AIHeuristic)
-			}
+	if data.Heuristic != "" {
+		var ok bool
+		heuristic, ok = parseHeuristic(data.Heuristic)
+		if !ok {
+			return nil, fmt.Errorf("new game message: invalid 'Heuristic' value %q", data.Heuristic)
 		}
 	}
 
-	newGameMsg := newGameMessage{
-		against:     against,
+	newGameMsg := newAIGameMessage{
 		captureRule: captureRule,
 		bestRule:    bestRule,
-		aiTimeLimit: aiTimeLimit,
-		aiHeuristic: aiHeuristic,
+		timeLimit:   timeLimit,
+		heuristic:   heuristic,
 	}
 	return &newGameMsg, nil
 }

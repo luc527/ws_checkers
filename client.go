@@ -62,22 +62,27 @@ outer:
 			}
 			switch envelope.T {
 
-			// TODO remove 'against' from new game message
-			// then 'namespace' these messages:
-			// ai/new, ai/join, ai/reconnect, ...
-
-			case "new-game":
-				msg, err := parseNewGameMessage(envelope)
+			case "ai/new":
+				msg, err := parseNewAIGameMessage(envelope)
 				if err != nil {
 					c.sendErr("invalid format: %v", err)
 					continue
 				}
-				c.handleNewGame(msg)
+				c.handleNewAIGame(msg)
 				return
-			case "join-game":
+			case "ai/join":
 				c.sendErr("unimplemented")
 				break outer
-			case "reconnect-to-game":
+			case "ai/reconnect":
+				c.sendErr("unimplemented")
+				break outer
+			case "pvp/new":
+				c.sendErr("unimplemented")
+				break outer
+			case "pvp/join":
+				c.sendErr("unimplemented")
+				break outer
+			case "pvp/reconnect":
 				c.sendErr("unimplemented")
 				break outer
 			default:
@@ -89,8 +94,8 @@ outer:
 	c.close()
 }
 
-func (c *client) handleNewGame(msg *newGameMessage) {
-	req := newRequest[*newGameMessage, token](msg)
+func (c *client) handleNewAIGame(msg *newAIGameMessage) {
+	req := newRequest[*newAIGameMessage, token](msg)
 	aiHub.register <- req
 	select {
 	case token := <-req.response:
