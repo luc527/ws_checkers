@@ -2,108 +2,75 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
-	"log"
-	"time"
+
+	"github.com/google/uuid"
+	"github.com/luc527/go_checkers/core"
 )
 
-var (
-	theMachHub = newMachHub()
-)
-
-type client struct {
+type rawClient struct {
 	incoming <-chan []byte
 	outgoing chan<- []byte
 	stop     chan struct{}
 }
 
-func (c *client) close() {
+func (c *rawClient) close() {
 	close(c.stop)
 }
 
-func (c *client) trySend(v any) {
-	bytes, err := json.Marshal(v)
-	log.Printf("trying to send %q, err %v\n", string(bytes), err)
-	if err == nil {
-		c.outgoing <- bytes
-	}
+type gameState struct {
+	id     uuid.UUID
+	board  core.Board
+	result core.GameResult
+	toPlay core.Color
+	plies  []core.Ply
 }
 
-func (c *client) sendStr(t string, f string, a ...any) {
-	s := fmt.Sprintf(f, a...)
-	c.trySend(stringMessage{
-		T:    t,
-		Text: s,
-	})
+type gameClient struct {
+	rawClient
+	doPly     chan int
+	gameState chan gameState
 }
 
-func (c *client) sendErr(f string, a ...any) {
-	err := fmt.Sprintf(f, a...)
-	c.trySend(errorMessage(err))
-}
-
-func (c *client) handleFirstMessage() {
-	timer := time.NewTimer(1 * time.Minute)
-	defer timer.Stop()
-
-outer:
+func (c *gameClient) run() {
 	for {
 		select {
-		case <-timer.C:
-			break outer
-		case bytes, ok := <-c.incoming:
-			if !ok {
-				break outer
-			}
-			envelope := messageEnvelope{}
+		case bytes := <-c.incoming:
+			var envelope messageEnvelope
 			if err := json.Unmarshal(bytes, &envelope); err != nil {
-				c.sendErr("invalid message format %v", err)
+				// TODO respond with err
 				continue
 			}
-			fmt.Printf("envelope.T: %v\n", envelope.T)
-			switch envelope.T {
-			case "mach/new":
-				msg, err := parseNewMachGameMessage(envelope)
-				if err != nil {
-					c.sendErr("invalid format: %v", err)
-					continue
-				}
-				c.handleNewMachGame(msg)
-				return
-			case "mach/join":
-				c.sendErr("unimplemented")
-				break outer
-			case "mach/reconnect":
-				c.sendErr("unimplemented")
-				break outer
-			case "pvp/new":
-				c.sendErr("unimplemented")
-				break outer
-			case "pvp/join":
-				c.sendErr("unimplemented")
-				break outer
-			case "pvp/reconnect":
-				c.sendErr("unimplemented")
-				break outer
-			default:
-				c.sendErr("invalid message type at this point (first message)")
+			var ply int
+			if err := json.Unmarshal(*envelope.Raw, &ply); err != nil {
+				// @CopyPaste!!!!
+				// TODO respond with err
 				continue
 			}
+			c.doPly <- ply
+		case state := <-c.gameState:
+			data := gameStateMessageData{
+				GameId: state.id.String(),
+				Board:  state.board.Serialize(),
+				Result: state.result.String(),
+				ToPlay: state.toPlay.String(),
+				Plies:  state.plies,
+			}
+			rawDataBytes, err := json.Marshal(data)
+			if err != nil {
+				// TODO respond with err
+				continue
+			}
+			rawData := json.RawMessage(rawDataBytes)
+			envelope := messageEnvelope{
+				T:   "state",
+				Raw: &rawData,
+			}
+			rawEnvelope, err := json.Marshal(envelope)
+			if err != nil {
+				// TODO respond with err
+				continue
+			}
+			c.outgoing <- rawEnvelope
 		}
-	}
-	c.close()
-}
-
-func (c *client) handleNewMachGame(msg *newMachGameMessage) {
-	fmt.Printf("handleNewMachGame %v\n", msg)
-	req := newRequest[*newMachGameMessage, newMachGameResponse](msg)
-	theMachHub.register <- req
-	select {
-	case res := <-req.response:
-		fmt.Printf("res: %v\n", res)
-		c.sendStr("test", "token: "+res.token+", id: "+res.id.String())
-	case err := <-req.err:
-		fmt.Printf("err: %v\n", err)
-		c.sendErr("internal")
 	}
 }

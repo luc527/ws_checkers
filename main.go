@@ -92,8 +92,6 @@ func connWriter(conn *websocket.Conn, outgoing <-chan []byte, stopSignal chan st
 func runServer() {
 	flag.Parse()
 
-	go theMachHub.run()
-
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/" {
 			http.Error(w, "Not found", http.StatusNotFound)
@@ -119,9 +117,6 @@ func runServer() {
 
 		go connReader(conn, incoming, stopSignal)
 		go connWriter(conn, outgoing, stopSignal)
-
-		cli := client{incoming, outgoing, stopSignal}
-		cli.handleFirstMessage()
 	})
 
 	httpServer := &http.Server{
