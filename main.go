@@ -86,9 +86,6 @@ func connWriter(conn *websocket.Conn, outgoing <-chan []byte, stopSignal chan st
 	}
 }
 
-// TODO: don't stop the game when some player (even both) disconnects
-// but just wait some time and if nothing happens *then* stop it.
-
 func runServer() {
 	flag.Parse()
 
@@ -130,5 +127,6 @@ func runServer() {
 }
 
 func main() {
-	runServer()
+	// runServer()
+	gameMonitorStuff()
 }
