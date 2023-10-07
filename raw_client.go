@@ -20,6 +20,15 @@ func (rc *rawClient) disconnect() {
 	}
 }
 
+func (rc *rawClient) online() bool {
+	select {
+	case <-rc.stop:
+		return false
+	default:
+		return true
+	}
+}
+
 type stringMessage struct {
 	Type    string `json:"type"`
 	Message string `json:"message"`

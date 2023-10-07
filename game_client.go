@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
 
 	"github.com/luc527/go_checkers/core"
 )
@@ -21,79 +20,51 @@ type plyRequest struct {
 }
 
 type gameClient struct {
-	raw         *rawClient
-	errors      chan error
+	plyRequests chan<- plyRequest
 	gameStates  chan gameState
-	plyRequests chan plyRequest
+	errors      chan error
+	*rawClient
 }
 
-// TODO implementar MarshalJSON para core.Ply
-// o que vai requerir MarshalJSON para core.Instruction
-// fazer no pacote 'core' mesmo
-// no final dá pra descomentar o Plies
-
-type gameStateMessage struct {
-	Type        string `json:"type"`
-	Version     int    `json:"version"`
-	Board       string `json:"board"`
-	WhiteToPlay bool   `json:"whiteToPlay"`
-	Result      string `json:"result"`
-	// Plies       []core.Ply `json:"plies"`
-}
-
-type plyMessage struct {
-	Version  int `json:"version"`
-	PlyIndex int `json:"ply"`
-}
-
-func gameStateMessageFrom(s gameState) gameStateMessage {
-	return gameStateMessage{
-		Type:        "state",
-		Version:     s.v,
-		Board:       s.board.Serialize(),
-		WhiteToPlay: s.toPlay == core.WhiteColor,
-		Result:      s.result.String(),
-	}
-}
-
-func plyRequestFrom(pm plyMessage) plyRequest {
-	return plyRequest{v: pm.Version, i: pm.PlyIndex}
+func newGameClient(plyRequests chan<- plyRequest, raw *rawClient) *gameClient {
+	gameStates := make(chan gameState)
+	errors := make(chan error)
+	return &gameClient{plyRequests, gameStates, errors, raw}
 }
 
 func (c *gameClient) run() {
 	for {
 		select {
-		case <-c.raw.stop:
+		case <-c.stop:
 			return
 		case err := <-c.errors:
-			c.raw.errf("game client: %v", err)
+			c.errf("game client: %v", err)
 		case s := <-c.gameStates:
 			msg := gameStateMessageFrom(s)
 			if bs, err := json.Marshal(msg); err != nil {
-				c.raw.errf("game client: failed to marshal game state")
+				c.errf("game client: failed to marshal game state")
 			} else {
-				c.raw.outgoing <- bs
+				c.outgoing <- bs
 			}
-		case bs := <-c.raw.incoming:
+		case bs, ok := <-c.incoming:
+			if !ok {
+				return
+			}
 			var envelope messageEnvelope
-			err := json.Unmarshal(bs, &envelope)
-			if err != nil {
-				c.raw.errf("game client: failed to unmarshal envelope")
+			if err := json.Unmarshal(bs, &envelope); err != nil {
+				c.errf("game client: failed to unmarshal envelope")
 				continue
 			}
 			if envelope.Type != "ply" {
-				c.raw.errf("game client: invalid message type (%v)", envelope.Type)
+				c.errf("game client: invalid message type, expected 'ply' at this point")
 				continue
 			}
 			var pm plyMessage
-			err = json.Unmarshal(envelope.Raw, &pm)
-			if err != nil {
-				c.raw.errf("game client: failed to unmarshal ply message")
+			if err := json.Unmarshal(envelope.Raw, &pm); err != nil {
+				c.errf("game client: failed to unmarshal ply message")
 				continue
 			}
-			pr := plyRequestFrom(pm)
-			c.plyRequests <- pr
-			fmt.Println("received bytes from client", bs)
+			c.plyRequests <- plyRequest{v: pm.Version, i: pm.PlyIndex}
 		}
 	}
 }
