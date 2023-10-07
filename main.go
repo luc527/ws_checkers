@@ -114,6 +114,13 @@ func runServer() {
 
 		go connReader(conn, incoming, stopSignal)
 		go connWriter(conn, outgoing, stopSignal)
+
+		// TODO later we'll have to handle the first message separately
+		// but for now let's always assume it starts a new game
+
+		rc := rawClient{incoming, outgoing, stopSignal}
+		gc := gameClient{&rc, make(chan error), make(chan gameState), make(chan plyRequest)}
+		go gc.run()
 	})
 
 	httpServer := &http.Server{
@@ -127,6 +134,5 @@ func runServer() {
 }
 
 func main() {
-	// runServer()
-	gameMonitorStuff()
+	runServer()
 }
