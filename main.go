@@ -131,5 +131,6 @@ func runServer() {
 }
 
 func main() {
-	runServer()
+	// runServer()
+	testMachineGame()
 }

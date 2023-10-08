@@ -41,8 +41,9 @@ func (c *gameClient) run() {
 			c.errf("game client: %v", err)
 		case s := <-c.gameStates:
 			msg := gameStateMessageFrom(s)
+			// TODO check if json.Marshal will call the MarshalJSON implementation for core.Ply
 			if bs, err := json.Marshal(msg); err != nil {
-				c.errf("game client: failed to marshal game state")
+				c.errf("game client: failed to marshal game state: %v", err)
 			} else {
 				c.outgoing <- bs
 			}
@@ -52,16 +53,18 @@ func (c *gameClient) run() {
 			}
 			var envelope messageEnvelope
 			if err := json.Unmarshal(bs, &envelope); err != nil {
-				c.errf("game client: failed to unmarshal envelope")
+				c.errf("game client: failed to unmarshal envelope: %v", err)
 				continue
 			}
+			// "ply" is the only supported type so far.
+			// This could turn into a switch later.
 			if envelope.Type != "ply" {
 				c.errf("game client: invalid message type, expected 'ply' at this point")
 				continue
 			}
 			var pm plyMessage
 			if err := json.Unmarshal(envelope.Raw, &pm); err != nil {
-				c.errf("game client: failed to unmarshal ply message")
+				c.errf("game client: failed to unmarshal ply message: %v", err)
 				continue
 			}
 			c.plyRequests <- plyRequest{v: pm.Version, i: pm.PlyIndex}

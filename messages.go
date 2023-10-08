@@ -1,19 +1,23 @@
 package main
 
-import "github.com/luc527/go_checkers/core"
+import (
+	"encoding/json"
 
-// TODO implementar MarshalJSON para core.Ply
-// o que vai requerir MarshalJSON para core.Instruction
-// fazer no pacote 'core' mesmo
-// no final dá pra descomentar o Plies
+	"github.com/luc527/go_checkers/core"
+)
+
+type messageEnvelope struct {
+	Type string          `json:"type"`
+	Raw  json.RawMessage `json:"data"`
+}
 
 type gameStateMessage struct {
-	Type        string `json:"type"`
-	Version     int    `json:"version"`
-	Board       string `json:"board"`
-	WhiteToPlay bool   `json:"whiteToPlay"`
-	Result      string `json:"result"`
-	// Plies       []core.Ply `json:"plies"`
+	Type        string     `json:"type"`
+	Version     int        `json:"version"`
+	Board       string     `json:"board"`
+	WhiteToPlay bool       `json:"whiteToPlay"`
+	Result      string     `json:"result"`
+	Plies       []core.Ply `json:"plies"`
 }
 
 type plyMessage struct {
@@ -28,5 +32,6 @@ func gameStateMessageFrom(s gameState) gameStateMessage {
 		Board:       s.board.Serialize(),
 		WhiteToPlay: s.toPlay == core.WhiteColor,
 		Result:      s.result.String(),
+		Plies:       s.plies,
 	}
 }

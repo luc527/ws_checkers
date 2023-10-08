@@ -14,12 +14,13 @@ type machineGameServer struct {
 	g          *core.Game
 	state      gameState
 	v          int
-	cli        *gameClient
+	cli        *gameClient // TODO slice of clients? allow multiple tabs/devices/etc.
 	searcher   minimax.Searcher
 	humanPlies chan plyRequest
 	machPlies  chan core.Ply
 	setClient  chan *gameClient
 	delClient  chan *gameClient
+	ended      chan struct{}
 }
 
 func newMachineGameServer(
@@ -61,10 +62,11 @@ func (sv *machineGameServer) gameState() gameState {
 			result: sv.g.Result(),
 		}
 	}
+	log.Printf("game state: %#v\n", sv.state)
 	return sv.state
 }
 
-func (sv *machineGameServer) runMachine() {
+func (sv *machineGameServer) runMachineTurn() {
 	sv.machPlies <- sv.searcher.Search(sv.g)
 }
 
@@ -74,8 +76,10 @@ func (sv *machineGameServer) runMachine() {
 func (sv *machineGameServer) run() {
 	g := sv.g
 
+	defer close(sv.ended)
+
 	if g.ToPlay() != sv.humanColor {
-		go sv.runMachine()
+		go sv.runMachineTurn()
 	}
 
 	for {
@@ -118,7 +122,12 @@ func (sv *machineGameServer) run() {
 			}
 			sv.v++
 			cli.gameStates <- sv.gameState()
-			go sv.runMachine()
+
+			if g.Result().Over() {
+				return
+			} else {
+				go sv.runMachineTurn()
+			}
 
 		case ply := <-sv.machPlies:
 			if g.ToPlay() == sv.humanColor {
@@ -127,10 +136,20 @@ func (sv *machineGameServer) run() {
 			}
 			if _, err := g.DoPly(ply); err != nil {
 				log.Printf("machine game server: machine ply failed: %v\n", err)
+				// TODO should this really be done?
+				// Try again in a second
+				go func() {
+					<-time.After(1 * time.Second)
+					sv.machPlies <- ply
+				}()
 				continue
 			}
 			sv.v++
 			cli.gameStates <- sv.gameState()
+
+			if g.Result().Over() {
+				return
+			}
 		}
 	}
 }
