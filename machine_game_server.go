@@ -10,8 +10,8 @@ import (
 )
 
 type machineGameServer struct {
-	humanColor core.Color
 	g          *core.Game
+	humanColor core.Color
 	state      gameState
 	v          int
 	cli        *gameClient // TODO slice of clients? allow multiple tabs/devices/etc.
@@ -20,7 +20,6 @@ type machineGameServer struct {
 	machPlies  chan core.Ply
 	setClient  chan *gameClient
 	delClient  chan *gameClient
-	ended      chan struct{}
 }
 
 func newMachineGameServer(
@@ -62,12 +61,16 @@ func (sv *machineGameServer) gameState() gameState {
 			result: sv.g.Result(),
 		}
 	}
-	log.Printf("game state: %#v\n", sv.state)
 	return sv.state
 }
 
 func (sv *machineGameServer) runMachineTurn() {
-	sv.machPlies <- sv.searcher.Search(sv.g)
+	// Since this is concurrent with (*machineGameServer).run(),
+	// it needs to create a copy of the game. (*core.Game).Copy()
+	// deep-copies board, which is what we want, and shallow-copies
+	// plies, with which there's no problem since only
+	// (*machineGameServer).run() changes it.
+	sv.machPlies <- sv.searcher.Search(sv.g.Copy())
 }
 
 // TODO timer to stop machine game automatically
@@ -76,7 +79,7 @@ func (sv *machineGameServer) runMachineTurn() {
 func (sv *machineGameServer) run() {
 	g := sv.g
 
-	defer close(sv.ended)
+	// TODO: what to do when game ends
 
 	if g.ToPlay() != sv.humanColor {
 		go sv.runMachineTurn()
@@ -84,18 +87,16 @@ func (sv *machineGameServer) run() {
 
 	for {
 		if sv.cli == nil {
-			sv.cli = <-sv.setClient
-		}
-		if sv.cli == nil {
-			continue
+			cli := <-sv.setClient
+			if cli != nil {
+				sv.cli = cli
+				s := sv.gameState()
+				cli.gameStates <- s
+			} else {
+				continue
+			}
 		}
 		cli := sv.cli
-
-		s := sv.gameState()
-		cli.gameStates <- s
-		if s.result.Over() {
-			continue
-		}
 
 		select {
 		case <-sv.setClient:
@@ -140,6 +141,7 @@ func (sv *machineGameServer) run() {
 				// Try again in a second
 				go func() {
 					<-time.After(1 * time.Second)
+					log.Printf("machine game server: trying again after 1 second\n")
 					sv.machPlies <- ply
 				}()
 				continue

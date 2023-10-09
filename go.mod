@@ -4,5 +4,5 @@ go 1.21.1
 
 require (
 	github.com/gorilla/websocket v1.5.0
-	github.com/luc527/go_checkers v1.2.1
+	github.com/luc527/go_checkers v1.4.1
 )

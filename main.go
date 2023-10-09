@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"log"
 	"net/http"
 	"time"
@@ -89,6 +90,7 @@ func connWriter(conn *websocket.Conn, outgoing <-chan []byte, stopSignal chan st
 func runServer() {
 	flag.Parse()
 
+	// Just for testing
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/" {
 			http.Error(w, "Not found", http.StatusNotFound)
@@ -115,15 +117,15 @@ func runServer() {
 		go connReader(conn, incoming, stopSignal)
 		go connWriter(conn, outgoing, stopSignal)
 
-		// TODO later we'll have to handle the first message separately
-		// but for now let's always assume it starts a new game
-
+		raw := rawClient{incoming, outgoing, stopSignal}
+		raw.handleFirstMessage()
 	})
 
 	httpServer := &http.Server{
 		Addr:              *addr,
 		ReadHeaderTimeout: 3 * time.Second,
 	}
+	fmt.Println("Running server on localhost:8080")
 	err := httpServer.ListenAndServe()
 	if err != nil {
 		log.Println("ListenAndServe: ", err)
@@ -131,6 +133,5 @@ func runServer() {
 }
 
 func main() {
-	// runServer()
-	testMachineGame()
+	runServer()
 }

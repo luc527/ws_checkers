@@ -47,10 +47,7 @@ func (c *gameClient) run() {
 			} else {
 				c.outgoing <- bs
 			}
-		case bs, ok := <-c.incoming:
-			if !ok {
-				return
-			}
+		case bs := <-c.incoming:
 			var envelope messageEnvelope
 			if err := json.Unmarshal(bs, &envelope); err != nil {
 				c.errf("game client: failed to unmarshal envelope: %v", err)
