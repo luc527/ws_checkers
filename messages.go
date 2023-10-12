@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 
+	"github.com/google/uuid"
 	"github.com/luc527/go_checkers/core"
 )
 
@@ -47,4 +48,22 @@ func gameStateMessageFrom(s gameState) gameStateMessage {
 		Result:      s.result,
 		Plies:       s.plies,
 	}
+}
+
+// Outgoing
+type gameIdMessage struct {
+	Type string `json:"type"`
+	Id   string `json:"id"`
+}
+
+func gameIdMessageFrom(id uuid.UUID) gameIdMessage {
+	return gameIdMessage{
+		Type: "id",
+		Id:   id.String(),
+	}
+}
+
+// Incoming
+type reconnectMachineGameMessage struct {
+	Id string `json:"id"`
 }

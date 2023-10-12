@@ -26,6 +26,10 @@ type gameClient struct {
 	*rawClient
 }
 
+// TODO: instead of being passed from the server,
+// should the client create its own ply channels
+// and be responsible for closing it?
+
 func newGameClient(plyRequests chan<- plyRequest, raw *rawClient) *gameClient {
 	gameStates := make(chan gameState)
 	errors := make(chan error)
@@ -35,7 +39,7 @@ func newGameClient(plyRequests chan<- plyRequest, raw *rawClient) *gameClient {
 func (c *gameClient) run() {
 	for {
 		select {
-		case <-c.stop:
+		case <-c.ended:
 			return
 		case err := <-c.errors:
 			c.errf("game client: %v", err)
@@ -47,7 +51,10 @@ func (c *gameClient) run() {
 			} else {
 				c.outgoing <- bs
 			}
-		case bs := <-c.incoming:
+		case bs, ok := <-c.incoming:
+			if !ok {
+				return
+			}
 			var envelope messageEnvelope
 			if err := json.Unmarshal(bs, &envelope); err != nil {
 				c.errf("game client: failed to unmarshal envelope: %v", err)

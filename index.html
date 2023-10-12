@@ -347,48 +347,74 @@ function capitalize(s) {
 const boardGui = new BoardGui(document.querySelector('.game-container'))
 const pliesGui = new PliesGui(document.querySelector('.plies-container'), ply)
 
-const ws = new WebSocket('ws://localhost:8080/ws')
-
-setTimeout(machNew, 1000)
-
-ws.onopen = ev => {
-    console.log('websocket open', ev)
-}
-
-ws.onerror = ev => {
-    console.log('websocket error', ev)
-}
-
-ws.onclose = ev => {
-    console.log('websocket close', ev)
-}
-
+let currWs = null
 let version = null
+let id = null
 
-ws.onmessage = ev => {
-    const msg = JSON.parse(ev.data)
+connect()
 
-    if (msg.type == 'state') {
-        const board = parseBoard(msg.board)
-        boardGui.update(board)
+function connect() {
+    const ws = new WebSocket('ws://localhost:8080/ws')
+    currWs = ws
 
-        if (msg.whiteToPlay) {
-            const plies = msg.plies.map(parsePly)
-            pliesGui.update(plies)
-        } else {
-            pliesGui.clear()
-        }
-
-        version = msg.version
+    if (version == null) {
+        setTimeout(machNew, 1000)
+    } else {
+        setTimeout(machReconnect, 1000)
     }
 
-    console.log('websocket msg', msg)
+    ws.onopen = ev => {
+        console.log('websocket open', ev)
+    }
+
+    ws.onerror = ev => {
+        console.log('websocket error', ev)
+    }
+
+    ws.onclose = ev => {
+        console.log('websocket close', ev)
+    }
+
+    ws.onmessage = ev => {
+        const msg = JSON.parse(ev.data)
+
+        console.log('received', msg)
+
+        if (msg.type == 'id') {
+            id = msg.id
+        }
+        else if (msg.type == 'state') {
+            const board = parseBoard(msg.board)
+            boardGui.update(board)
+
+            if (msg.whiteToPlay) {
+                const plies = msg.plies.map(parsePly)
+                pliesGui.update(plies)
+            } else {
+                pliesGui.clear()
+            }
+
+            version = msg.version
+        }
+    }
+
+}
+
+function reconnect() {
+    currWs.close()
+    currWs = null
+    console.log('reconnecting...')
+    setTimeout(connect, 2000)
 }
 
 function send(type, data) {
     const msg = {type, data}
-    console.log('sending', msg)
-    ws.send(JSON.stringify(msg))
+    if (currWs?.readyState == WebSocket.OPEN) {
+        console.log('sending', msg)
+        currWs.send(JSON.stringify(msg))
+    } else {
+        console.log('ws is closed, send failed', {type, data})
+    }
 }
 
 function ply(i) {
@@ -403,6 +429,12 @@ function machNew() {
         timeLimitMs: 1000,
         heuristic: 'UnweightedCount'
     });
+}
+
+function machReconnect() {
+    send('mach/reconnect', {
+        id: id,
+    })
 }
 </script>
 

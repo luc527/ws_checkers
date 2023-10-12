@@ -5,11 +5,13 @@ import (
 	"log"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/luc527/go_checkers/core"
 	"github.com/luc527/go_checkers/minimax"
 )
 
 type machineGameServer struct {
+	id         uuid.UUID
 	g          *core.Game
 	humanColor core.Color
 	state      gameState
@@ -18,9 +20,11 @@ type machineGameServer struct {
 	searcher   minimax.Searcher
 	humanPlies chan plyRequest
 	machPlies  chan core.Ply
-	setClient  chan *gameClient
-	delClient  chan *gameClient
-	ended      chan struct{}
+	client     chan *gameClient
+
+	stop      chan struct{}
+	ended     chan struct{}
+	heartbeat chan struct{}
 }
 
 func newMachineGameServer(
@@ -29,7 +33,7 @@ func newMachineGameServer(
 	bestRule core.BestRule,
 	timeLimit time.Duration,
 	heuristic minimax.Heuristic,
-) *machineGameServer {
+) (*machineGameServer, error) {
 
 	if heuristic == nil {
 		heuristic = minimax.WeightedCountHeuristic
@@ -40,17 +44,28 @@ func newMachineGameServer(
 		TimeLimit: timeLimit,
 	}
 
+	id, err := uuid.NewRandom()
+	if err != nil {
+		return nil, err
+	}
+
+	// TODO: when the game ends, what to do with all those channels
+	// need to avoid goroutine leak
+	// every place that sends to one of those channels needs to check first if the game has ended?
+
 	return &machineGameServer{
+		id:         id,
 		humanColor: humanColor,
 		g:          core.NewGame(captureRule, bestRule),
 		v:          1,
 		searcher:   searcher,
-		humanPlies: make(chan plyRequest),
-		machPlies:  make(chan core.Ply),
-		setClient:  make(chan *gameClient),
-		delClient:  make(chan *gameClient),
-		ended:      make(chan struct{}),
-	}
+		humanPlies: make(chan plyRequest), // passed to game clients so they can send plies to the server
+		machPlies:  make(chan core.Ply),   // used by `go sv.runMachineTurn()` to send the machine's ply choice
+		client:     make(chan *gameClient),
+		stop:       make(chan struct{}), // closed from outside when the someone wants to stop the game
+		ended:      make(chan struct{}), // closed from the inside to signal that the game server has ended (not necessarily that the game itself is over)
+		heartbeat:  make(chan struct{}), // struct{}{}s sent from the inside to signal that the game still has activity
+	}, nil
 }
 
 func (sv *machineGameServer) gameState() gameState {
@@ -72,18 +87,17 @@ func (sv *machineGameServer) runMachineTurn() {
 	// deep-copies board, which is what we want, and shallow-copies
 	// plies, with which there's no problem since only
 	// (*machineGameServer).run() changes it.
+
 	sv.machPlies <- sv.searcher.Search(sv.g.Copy())
 }
 
-// TODO timer to stop machine game automatically
-// and Reset calls to reset when there's activity
-
 func (sv *machineGameServer) run() {
-	defer close(sv.ended)
+	defer func() {
+		close(sv.ended)
+		close(sv.heartbeat)
+	}()
 
 	g := sv.g
-
-	// TODO: what to do when game ends
 
 	if g.ToPlay() != sv.humanColor {
 		go sv.runMachineTurn()
@@ -91,7 +105,15 @@ func (sv *machineGameServer) run() {
 
 	for {
 		if sv.cli == nil {
-			cli := <-sv.setClient
+			var cli *gameClient
+
+			select {
+			case c := <-sv.client:
+				cli = c
+			case <-sv.stop:
+				return
+			}
+
 			if cli != nil {
 				sv.cli = cli
 				s := sv.gameState()
@@ -100,17 +122,25 @@ func (sv *machineGameServer) run() {
 				continue
 			}
 		}
+		log.Println("machine game server: got client")
 		cli := sv.cli
 
-		select {
-		case <-sv.setClient:
+		sv.heartbeat <- struct{}{}
 
-		case oldCli := <-sv.delClient:
-			if oldCli == sv.cli {
-				sv.cli = nil
-			}
+		select {
+		case <-sv.stop:
+			return
+
+		case <-cli.ended:
+			log.Println("machine game server: client ended")
+			sv.heartbeat <- struct{}{}
+			sv.cli = nil
+
+		case <-sv.client:
+			sv.heartbeat <- struct{}{}
 
 		case pr := <-sv.humanPlies:
+			sv.heartbeat <- struct{}{}
 			if g.ToPlay() != sv.humanColor {
 				cli.errors <- fmt.Errorf("machine game server: not your turn")
 				continue
@@ -135,6 +165,7 @@ func (sv *machineGameServer) run() {
 			}
 
 		case ply := <-sv.machPlies:
+			sv.heartbeat <- struct{}{}
 			if g.ToPlay() == sv.humanColor {
 				log.Println("machine game server: machine ply attempt on human's turn")
 				continue

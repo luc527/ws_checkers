@@ -3,6 +3,7 @@
 package main
 
 import (
+	"log"
 	"time"
 
 	"github.com/luc527/go_checkers/core"
@@ -10,19 +11,22 @@ import (
 )
 
 func testMachineGame() {
-	ms := newMachineGameServer(
+	ms, err := newMachineGameServer(
 		core.WhiteColor,
 		core.CapturesMandatory,
 		core.BestNotMandatory,
 		800*time.Millisecond,
 		minimax.UnweightedCountHeuristic,
 	)
+	if err != nil {
+		log.Fatalf("err: %v\n", err)
+	}
 	go ms.run()
 
 	gc := newGameClient(ms.humanPlies, stdioRawClient())
 	go gc.run()
 
-	ms.setClient <- gc
+	ms.client <- gc
 
 	<-ms.ended
 }

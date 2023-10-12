@@ -25,11 +25,13 @@ const (
 	pingPeriod = (pongWait * 9) / 10
 )
 
-func connReader(conn *websocket.Conn, incoming chan<- []byte, stopSignal <-chan struct{}) {
+func connReader(conn *websocket.Conn, incoming chan<- []byte, ended chan<- struct{}) {
 	defer func() {
 		conn.Close()
 		close(incoming)
+		close(ended)
 	}()
+
 	log.Println("connReader started")
 
 	conn.SetReadDeadline(time.Now().Add(pongWait))
@@ -40,11 +42,6 @@ func connReader(conn *websocket.Conn, incoming chan<- []byte, stopSignal <-chan 
 	})
 
 	for {
-		select {
-		case <-stopSignal:
-			return
-		default:
-		}
 		_, msg, err := conn.ReadMessage()
 		if err != nil {
 			log.Println("connReader err: ", err)
@@ -55,7 +52,7 @@ func connReader(conn *websocket.Conn, incoming chan<- []byte, stopSignal <-chan 
 	}
 }
 
-func connWriter(conn *websocket.Conn, outgoing <-chan []byte, stopSignal chan struct{}) {
+func connWriter(conn *websocket.Conn, outgoing <-chan []byte, ended <-chan struct{}) {
 	ticker := time.NewTicker(pingPeriod)
 	defer func() {
 		conn.Close()
@@ -65,7 +62,7 @@ func connWriter(conn *websocket.Conn, outgoing <-chan []byte, stopSignal chan st
 	log.Println("connWriter started")
 	for {
 		select {
-		case <-stopSignal:
+		case <-ended:
 			return
 		case msg, ok := <-outgoing:
 			conn.SetWriteDeadline(time.Now().Add(writeWait))
@@ -106,18 +103,18 @@ func runServer() {
 	http.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
 		conn, err := upgrader.Upgrade(w, r, nil)
 		if err != nil {
-			log.Println(err)
+			log.Printf("upgrader: %v\n", err)
 			return
 		}
 
 		incoming := make(chan []byte)
 		outgoing := make(chan []byte)
-		stopSignal := make(chan struct{})
+		ended := make(chan struct{})
 
-		go connReader(conn, incoming, stopSignal)
-		go connWriter(conn, outgoing, stopSignal)
+		go connReader(conn, incoming, ended)
+		go connWriter(conn, outgoing, ended)
 
-		raw := rawClient{incoming, outgoing, stopSignal}
+		raw := rawClient{incoming, outgoing, ended}
 		raw.handleFirstMessage()
 	})
 
