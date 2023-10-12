@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+    <style>
+        :root {
+            --cool-red: rgb(186, 49, 49);
+        }
+
+        .container {
+            width: calc(100vw - 5rem);
+            margin: 1rem auto;
+            border-radius: 1rem;
+            background-color: rgb(238, 251, 255);
+            border: 0.2rem solid lightblue;
+            display: flex;
+            flex-direction: row;
+            align-items: stretch;
+            padding: 1rem;
+            gap: 1rem;
+        }
+
+        .checkers-table {
+            border: 0.2rem var(--cool-red) solid;
+            border-collapse: collapse;
+        }
+
+        .checkers-cell {
+            height: 48px;
+            width: 48px;
+        }
+
+        .checkers-piece-container {
+            display: flex;
+            flex-direction: row;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .checkers-cell.white-cell {
+            background-color: lightyellow;
+        }
+        .checkers-cell.black-cell {
+            background-color: var(--cool-red);
+        }
+
+        .king-piece {
+            width: 36px;
+            height: 36px;
+        }
+
+        .pawn-piece {
+            width: 32px;
+            height: 32px;
+            border-radius: 100%;
+        }
+
+        .white-piece {
+            background-color: white;
+        }
+        .black-piece {
+            background-color: black;
+        }
+
+        .plies-container {
+            border: 0.2rem burlywood solid;
+            flex: 1;
+            background-color: lightyellow;
+        }
+
+        .guide-cell {
+            background-color: beige;
+            border: 0.2rem var(--cool-red) solid;
+            color: var(--cool-red);
+            text-align: center;
+            width: 48px;
+            height: 48px;
+            font-size: 24px;
+            font-family: 'Inter', sans-serif;
+            font-weight: bold;
+        }
+
+        .guide-row .guide-cell:first-child, .guide-row .guide-cell:last-child {
+            background-color: var(--cool-red);
+        }
+
+        .plies-container {
+            padding: 1rem;
+        }
+
+        .ply {
+            padding: 0.5rem;
+            border-radius: 0.8rem;
+            background-color: rgb(252, 199, 207);
+            border: 0.1rem palevioletred solid;
+            color: rgb(197, 66, 110);
+            font-family: 'Inter', sans-serif;
+            font-weight: 500;
+        }
+
+        .ply:hover {
+            background-color: rgb(252, 234, 236);
+            cursor: pointer;
+        }
+
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <div class="game-container"></div>
+        <div class="plies-container"></div>
+    </div>
+
+<script>
+
+class PliesGui {
+    #container
+    #onClickPly
+
+    constructor(container, onClickPly) {
+        container.style['display'] = 'flex'
+        container.style['flex-direction'] = 'column'
+        container.style['gap'] = '0.5rem'
+
+        this.#onClickPly = onClickPly
+        this.#container = container
+    }
+
+    clear() {
+        while (this.#container.firstChild) {
+            this.#container.lastChild.remove()
+        }
+    }
+
+    update(plies) {
+        this.clear()
+
+        for (let i = 0; i < plies.length; i++) {
+            const ply = plies[i]
+
+            const plyElem = document.createElement('div')
+            plyElem.classList.add('ply')
+            plyElem.style['display'] = 'flex'
+            plyElem.style['flex-direction'] = 'column'
+            plyElem.style['gap'] = '0.2rem'
+
+            const descriptions = ply.map(describeInstruction)
+            descriptions[0] = capitalize(descriptions[0])
+
+            const description = descriptions.join('; ')
+
+            plyElem.innerText = description
+
+            const safei = i
+            plyElem.addEventListener('click', () => {
+                this.clear()
+                this.#onClickPly(safei)
+            })
+
+            this.#container.append(plyElem)
+        }
+    }
+}
+
+class BoardGui {
+    #pieces = []
+    constructor(container) {
+        const table = document.createElement('table')
+        table.classList.add('checkers-table')
+
+        function makeGuideRow() {
+            const row = document.createElement('tr')
+            row.classList.add('guide-row')
+
+            {
+                const cell = document.createElement('td')
+                cell.classList.add('guide-cell')
+                row.append(cell)
+            }
+
+            for (let i = 0; i < 8; i++) {
+                const cell = document.createElement('td')
+                cell.classList.add('guide-cell')
+                cell.innerText = i
+                row.append(cell)
+            }
+
+            {
+                const cell = document.createElement('td')
+                cell.classList.add('guide-cell')
+                row.append(cell)
+            }
+
+            return row
+        }
+
+        table.append(makeGuideRow())
+
+        for (let i = 0; i < 8; i++) {
+            this.#pieces[i] = []
+
+            const row = document.createElement('tr')
+            row.classList.add('checkers-row')
+
+            { // guide cell
+                const cell = document.createElement('td')
+                cell.classList.add('guide-cell')
+                cell.innerText = i
+                row.append(cell)
+            }
+
+            for (let j = 0; j < 8; j++) {
+                const cell = document.createElement('td')
+                cell.classList.add('checkers-cell')
+                cell.classList.add((i+j)%2==0 ? 'white-cell' : 'black-cell')
+
+                const pieceContainer = document.createElement('div')
+                pieceContainer.classList.add('checkers-piece-container')
+
+                const king = document.createElement('div')
+                king.classList.add('checkers-piece', 'king-piece')
+                king.style.display = 'none';
+
+                const pawn = document.createElement('div')
+                pawn.classList.add('checkers-piece', 'pawn-piece')
+                pawn.style.display = 'none';
+
+                this.#pieces[i][j] = {king, pawn}
+
+                pieceContainer.append(king)
+                pieceContainer.append(pawn)
+
+                cell.append(pieceContainer)
+
+                row.append(cell)
+            }
+
+            { // guide cell
+                const cell = document.createElement('td')
+                cell.classList.add('guide-cell')
+                cell.innerText = i
+                row.append(cell)
+            }
+
+            table.append(row)
+        }
+
+        table.append(makeGuideRow())
+
+        container.append(table)
+    }
+
+    clear(row, col) {
+        const {king, pawn} = this.#pieces[row][col]
+        king.style.display = 'none'
+        pawn.style.display = 'none'
+    }
+
+    set(row, col, color, kind) {
+        const {king, pawn} = this.#pieces[row][col]
+        const shown = kind == 'king' ? king : pawn
+        const other = shown == king ? pawn : king
+        shown.style.display = 'block'
+        other.style.display = 'none'
+        shown.classList.toggle('white-piece', color == 'white')
+        shown.classList.toggle('black-piece', color == 'black')
+    }
+
+    update(board) {
+        for (let i = 0; i < 8; i++) {
+            for (let j = 0; j < 8; j++) {
+                const piece = board[i][j]
+                if (piece == null) {
+                    this.clear(i, j)
+                } else {
+                    this.set(i, j, piece.color, piece.kind)
+                }
+            }
+        }
+    }
+}
+
+function parseBoard(str) {
+    const board = Array(8)
+    for (let i = 0; i < 8; i++) {
+        board[i] = Array(8).fill(null)
+    }
+
+    for (let i = 0; i < str.length; i += 4) {
+        const seg = str.slice(i, i+4)
+        const row = seg[0] - '0'
+        const col = seg[1] - '0'
+        const color = seg[2] == 'w' ? 'white' : 'black'
+        const kind  = seg[3] == 'k' ? 'king ' : 'pawn'
+        board[row][col] = {color, kind}
+    }
+
+    return board
+}
+
+function parsePly(ply) {
+    return ply.split(',').map(s => {
+        const row = s[1] - '0'
+        const col = s[2] - '0'
+        switch (s[0]) {
+            case 'm':
+                const drow = s[3] - '0'
+                const dcol = s[4] - '0'
+                return {
+                    type: 'move',
+                    row, col, drow, dcol
+                }
+            case 'c':
+                const color = s[3] == 'w' ? 'white' : 'black'
+                const kind  = s[4] == 'k' ? 'king' : 'pawn'
+                return {
+                    type: 'capture',
+                    row, col, color, kind
+                }
+            case 'k':
+                return {
+                    type: 'crown',
+                    row, col
+                }
+        }
+    })
+}
+
+function describeInstruction(ins) {
+    switch (ins.type) {
+        case 'move':
+            return `move from (${ins.row}, ${ins.col}) to (${ins.drow}, ${ins.dcol})`
+        case 'capture':
+            return `capture (${ins.color}, ${ins.kind}) at (${ins.row}, ${ins.col})`
+        case 'crown':
+            return `crown (${ins.row}, ${ins.col})`
+    }
+}
+
+function capitalize(s) {
+    return s.substring(0, 1).toUpperCase() + s.substring(1)
+}
+
+const boardGui = new BoardGui(document.querySelector('.game-container'))
+const pliesGui = new PliesGui(document.querySelector('.plies-container'), ply)
+
+const ws = new WebSocket('ws://localhost:8080/ws')
+
+setTimeout(machNew, 1000)
+
+ws.onopen = ev => {
+    console.log('websocket open', ev)
+}
+
+ws.onerror = ev => {
+    console.log('websocket error', ev)
+}
+
+ws.onclose = ev => {
+    console.log('websocket close', ev)
+}
+
+let version = null
+
+ws.onmessage = ev => {
+    const msg = JSON.parse(ev.data)
+
+    if (msg.type == 'state') {
+        const board = parseBoard(msg.board)
+        boardGui.update(board)
+
+        if (msg.whiteToPlay) {
+            const plies = msg.plies.map(parsePly)
+            pliesGui.update(plies)
+        } else {
+            pliesGui.clear()
+        }
+
+        version = msg.version
+    }
+
+    console.log('websocket msg', msg)
+}
+
+function send(type, data) {
+    const msg = {type, data}
+    console.log('sending', msg)
+    ws.send(JSON.stringify(msg))
+}
+
+function ply(i) {
+    send('ply', {version, ply: i,})
+}
+
+function machNew() {
+    send('mach/new', {
+        humanColor: 'white',
+        captureMandatory: true,
+        bestMandatory: false,
+        timeLimitMs: 1000,
+        heuristic: 'UnweightedCount'
+    });
+}
+</script>
+
+</body>
+</html>

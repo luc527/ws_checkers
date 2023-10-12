@@ -20,6 +20,7 @@ type machineGameServer struct {
 	machPlies  chan core.Ply
 	setClient  chan *gameClient
 	delClient  chan *gameClient
+	ended      chan struct{}
 }
 
 func newMachineGameServer(
@@ -48,6 +49,7 @@ func newMachineGameServer(
 		machPlies:  make(chan core.Ply),
 		setClient:  make(chan *gameClient),
 		delClient:  make(chan *gameClient),
+		ended:      make(chan struct{}),
 	}
 }
 
@@ -77,6 +79,8 @@ func (sv *machineGameServer) runMachineTurn() {
 // and Reset calls to reset when there's activity
 
 func (sv *machineGameServer) run() {
+	defer close(sv.ended)
+
 	g := sv.g
 
 	// TODO: what to do when game ends
