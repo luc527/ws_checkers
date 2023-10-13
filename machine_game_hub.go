@@ -2,10 +2,16 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"sync"
 	"time"
 
 	"github.com/google/uuid"
+)
+
+const (
+	// Time to stop and unregister a game with no activity
+	heartbeatTimeout = 10 * time.Minute
 )
 
 // TODO: some way to close the game hub?
@@ -26,6 +32,8 @@ func (h *machineGameHub) register(machGame *machineGameServer) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
+	log.Printf("machine game hub: register %v\n", machGame.id)
+
 	id := machGame.id
 	if _, exists := h.games[id]; exists {
 		return fmt.Errorf("running machine games: uuid conflict")
@@ -34,8 +42,7 @@ func (h *machineGameHub) register(machGame *machineGameServer) error {
 	h.games[id] = machGame
 
 	go func() {
-		timeout := 10 * time.Minute // TODO: either make it a const or let it be customizable (which would be specially helpful for tests)
-		timer := time.NewTimer(timeout)
+		timer := time.NewTimer(heartbeatTimeout)
 		defer func() {
 			timer.Stop()
 			h.unregister(id)
@@ -46,7 +53,8 @@ func (h *machineGameHub) register(machGame *machineGameServer) error {
 				close(machGame.stop)
 				return
 			case <-machGame.heartbeat:
-				timer.Reset(timeout)
+				log.Printf("heartbeat: %v\n", id)
+				timer.Reset(heartbeatTimeout)
 			case <-machGame.ended:
 				return
 			}
@@ -59,6 +67,7 @@ func (h *machineGameHub) register(machGame *machineGameServer) error {
 func (h *machineGameHub) get(id uuid.UUID) (*machineGameServer, bool) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	log.Printf("machine game hub: get %v\n", id)
 	server, ok := h.games[id]
 	return server, ok
 }
@@ -66,5 +75,6 @@ func (h *machineGameHub) get(id uuid.UUID) (*machineGameServer, bool) {
 func (h *machineGameHub) unregister(id uuid.UUID) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	log.Printf("machine game hub: unregister %v\n", id)
 	delete(h.games, id)
 }

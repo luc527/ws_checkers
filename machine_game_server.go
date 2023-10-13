@@ -62,9 +62,9 @@ func newMachineGameServer(
 		humanPlies: make(chan plyRequest), // passed to game clients so they can send plies to the server
 		machPlies:  make(chan core.Ply),   // used by `go sv.runMachineTurn()` to send the machine's ply choice
 		client:     make(chan *gameClient),
-		stop:       make(chan struct{}), // closed from outside when the someone wants to stop the game
-		ended:      make(chan struct{}), // closed from the inside to signal that the game server has ended (not necessarily that the game itself is over)
-		heartbeat:  make(chan struct{}), // struct{}{}s sent from the inside to signal that the game still has activity
+		stop:       make(chan struct{}),    // closed from outside when the someone wants to stop the game
+		ended:      make(chan struct{}),    // closed from the inside to signal that the game server has ended (not necessarily that the game itself is over)
+		heartbeat:  make(chan struct{}, 8), // struct{}{}s sent from the inside to signal that the game still has activity
 	}, nil
 }
 
@@ -109,6 +109,7 @@ func (sv *machineGameServer) run() {
 
 			select {
 			case c := <-sv.client:
+				sv.heartbeat <- struct{}{}
 				cli = c
 			case <-sv.stop:
 				return
@@ -116,16 +117,14 @@ func (sv *machineGameServer) run() {
 
 			if cli != nil {
 				sv.cli = cli
+				log.Println("machine game server: got client")
 				s := sv.gameState()
 				cli.gameStates <- s
 			} else {
 				continue
 			}
 		}
-		log.Println("machine game server: got client")
 		cli := sv.cli
-
-		sv.heartbeat <- struct{}{}
 
 		select {
 		case <-sv.stop:

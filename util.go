@@ -1,6 +1,11 @@
 package main
 
-import "github.com/luc527/go_checkers/core"
+import (
+	"encoding/json"
+	"fmt"
+
+	"github.com/luc527/go_checkers/core"
+)
 
 // TODO move copy functions to core package
 
@@ -17,3 +22,14 @@ func copyPlies(ps []core.Ply) []core.Ply {
 	}
 	return c
 }
+
+func mustMarshal(x any) []byte {
+	if bs, err := json.Marshal(x); err != nil {
+		panic(fmt.Sprintf("must marshal: failed to marshal: %v\n", x))
+	} else {
+		return bs
+	}
+}
+
+// shortcut for json object
+type jo map[string]any
