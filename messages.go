@@ -14,6 +14,19 @@ type messageEnvelope struct {
 }
 
 // Outgoing
+type stringMessage struct {
+	Type    string `json:"type"`
+	Message string `json:"message"`
+}
+
+func errorMessage(err string) stringMessage {
+	return stringMessage{
+		Type:    "error",
+		Message: err,
+	}
+}
+
+// Outgoing
 type gameStateMessage struct {
 	Type        string          `json:"type"`
 	Version     int             `json:"version"`

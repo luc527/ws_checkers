@@ -2,7 +2,7 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
+	"testing"
 
 	"github.com/luc527/go_checkers/core"
 )
@@ -23,13 +23,22 @@ func copyPlies(ps []core.Ply) []core.Ply {
 	return c
 }
 
-func mustMarshal(x any) []byte {
+// shortcut for json object
+type jo map[string]any
+
+func tmarshal(x any, t *testing.T) []byte {
 	if bs, err := json.Marshal(x); err != nil {
-		panic(fmt.Sprintf("must marshal: failed to marshal: %v\n", x))
+		t.Logf("failed to marshal %v, error: %v\n", x, err)
+		t.Fail()
+		return nil
 	} else {
 		return bs
 	}
 }
 
-// shortcut for json object
-type jo map[string]any
+func tunmarshal(s string, x any, t *testing.T) {
+	if err := json.Unmarshal([]byte(s), x); err != nil {
+		t.Logf("failed to unmarshal %v, error: %v\n", s, err)
+		t.Fail()
+	}
+}

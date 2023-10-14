@@ -1,8 +1,6 @@
 package main
 
 import (
-	"log"
-	"net/http"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -19,33 +17,6 @@ const (
 	pingPeriod = (pongWait * 9) / 10
 )
 
-var upgrader = websocket.Upgrader{}
-
-type websocketServer struct {
-	mux     *http.ServeMux
-	clients chan *rawClient
-}
-
-func (wss *websocketServer) serve(addr string) {
-	defer close(wss.clients)
-	if err := http.ListenAndServe(addr, wss.mux); err != http.ErrServerClosed {
-		log.Fatalf("listen and serve: %v", err)
-	}
-}
-
-func newWebsocketServer() *websocketServer {
-	mux := http.NewServeMux()
-	clients := make(chan *rawClient)
-	mux.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
-		conn, err := upgrader.Upgrade(w, r, nil)
-		if err != nil {
-			return
-		}
-		clients <- websocketRawClient(conn)
-	})
-	return &websocketServer{mux, clients}
-}
-
 func connReader(conn *websocket.Conn, incoming chan<- []byte, ended chan<- struct{}) {
 	defer func() {
 		conn.Close()
@@ -53,11 +24,11 @@ func connReader(conn *websocket.Conn, incoming chan<- []byte, ended chan<- struc
 		close(ended)
 	}()
 
-	log.Println("connReader started")
+	// log.Println("connReader started")
 
 	conn.SetReadDeadline(time.Now().Add(pongWait))
 	conn.SetPongHandler(func(string) error {
-		log.Println("connReader pong")
+		// log.Println("connReader pong")
 		conn.SetReadDeadline(time.Now().Add(pongWait))
 		return nil
 	})
@@ -65,10 +36,10 @@ func connReader(conn *websocket.Conn, incoming chan<- []byte, ended chan<- struc
 	for {
 		_, msg, err := conn.ReadMessage()
 		if err != nil {
-			log.Println("connReader err: ", err)
+			// log.Println("connReader err: ", err)
 			break
 		}
-		log.Println("connReader msg: ", string(msg))
+		// log.Println("connReader msg: ", string(msg))
 		incoming <- msg
 	}
 }
@@ -80,7 +51,7 @@ func connWriter(conn *websocket.Conn, outgoing <-chan []byte, ended <-chan struc
 		ticker.Stop()
 	}()
 
-	log.Println("connWriter started")
+	// log.Println("connWriter started")
 	for {
 		select {
 		case <-ended:
@@ -90,16 +61,16 @@ func connWriter(conn *websocket.Conn, outgoing <-chan []byte, ended <-chan struc
 			if !ok {
 				// Channel has been closed
 				if err := conn.WriteMessage(websocket.CloseMessage, []byte{}); err != nil {
-					log.Println("connWriter error (2) ", err)
+					// log.Println("connWriter error (2) ", err)
 				}
 				return
 			}
-			log.Println("connWriter msg ", string(msg))
+			// log.Println("connWriter msg ", string(msg))
 			conn.WriteMessage(websocket.TextMessage, msg)
 		case <-ticker.C:
 			conn.SetWriteDeadline(time.Now().Add(writeWait))
 			if err := conn.WriteMessage(websocket.PingMessage, nil); err != nil {
-				log.Println("connWriter error (3) ", err)
+				// log.Println("connWriter error (3) ", err)
 				return
 			}
 		}

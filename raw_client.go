@@ -1,11 +1,9 @@
 package main
 
 import (
-	"bufio"
 	"encoding/json"
 	"fmt"
 	"log"
-	"os"
 	"time"
 
 	"github.com/google/uuid"
@@ -21,53 +19,6 @@ type rawClient struct {
 	incoming <-chan []byte
 	outgoing chan<- []byte
 	ended    <-chan struct{}
-}
-
-func stdioRawClient() *rawClient {
-	// for testing in the cli
-	incoming := make(chan []byte)
-	outgoing := make(chan []byte)
-	ended := make(chan struct{})
-
-	go func() {
-		defer func() {
-			close(incoming)
-			close(ended)
-		}()
-		in := bufio.NewScanner(os.Stdin)
-		for in.Scan() {
-			incoming <- []byte(in.Text())
-		}
-		// NOTE: Ignorning potential errors from in.Err()
-	}()
-
-	go func() {
-		for {
-			select {
-			case <-ended:
-				return
-			case bs, ok := <-outgoing:
-				if !ok {
-					return
-				}
-				fmt.Println(string(bs))
-			}
-		}
-	}()
-
-	return &rawClient{incoming, outgoing, ended}
-}
-
-type stringMessage struct {
-	Type    string `json:"type"`
-	Message string `json:"message"`
-}
-
-func errorMessage(err string) stringMessage {
-	return stringMessage{
-		Type:    "error",
-		Message: err,
-	}
 }
 
 func (r *rawClient) errf(err string, a ...any) {
