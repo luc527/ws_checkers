@@ -13,7 +13,6 @@ var addr = flag.String("addr", ":8080", "http service address")
 func runServer() {
 	flag.Parse()
 
-	clients := make(chan *rawClient)
 	upgrader := websocket.Upgrader{}
 
 	http.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
@@ -22,7 +21,8 @@ func runServer() {
 			log.Printf("failed to upgrade: %v\n", err)
 			return
 		}
-		clients <- websocketRawClient(conn)
+		cli := websocketRawClient(conn)
+		cli.handleFirstMessage()
 	})
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -40,16 +40,8 @@ func runServer() {
 	server := http.Server{Addr: *addr}
 
 	log.Printf("server running at %v\n", *addr)
-
-	go func() {
-		defer close(clients)
-		if err := server.ListenAndServe(); err != http.ErrServerClosed {
-			log.Fatalln(err)
-		}
-	}()
-
-	for cli := range clients {
-		cli.handleFirstMessage()
+	if err := server.ListenAndServe(); err != http.ErrServerClosed {
+		log.Fatalln(err)
 	}
 }
 

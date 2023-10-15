@@ -20,15 +20,12 @@ const (
 func connReader(conn *websocket.Conn, incoming chan<- []byte, ended chan<- struct{}) {
 	defer func() {
 		conn.Close()
-		close(incoming)
 		close(ended)
+		close(incoming)
 	}()
-
-	// log.Println("connReader started")
 
 	conn.SetReadDeadline(time.Now().Add(pongWait))
 	conn.SetPongHandler(func(string) error {
-		// log.Println("connReader pong")
 		conn.SetReadDeadline(time.Now().Add(pongWait))
 		return nil
 	})
@@ -36,10 +33,8 @@ func connReader(conn *websocket.Conn, incoming chan<- []byte, ended chan<- struc
 	for {
 		_, msg, err := conn.ReadMessage()
 		if err != nil {
-			// log.Println("connReader err: ", err)
 			break
 		}
-		// log.Println("connReader msg: ", string(msg))
 		incoming <- msg
 	}
 }
@@ -49,9 +44,15 @@ func connWriter(conn *websocket.Conn, outgoing <-chan []byte, ended <-chan struc
 	defer func() {
 		conn.Close()
 		ticker.Stop()
+		// Drain channel so the goroutine sending to this channel doesn't block
+		// (even if the goroutine checks for <-ended before sending, it's possible
+		// for the connection to be closed just after the check). That goroutine
+		// will be responsible for closing the channel, otherwise there'll be a
+		// goroutine leak.
+		for range outgoing {
+		}
 	}()
 
-	// log.Println("connWriter started")
 	for {
 		select {
 		case <-ended:
@@ -59,25 +60,20 @@ func connWriter(conn *websocket.Conn, outgoing <-chan []byte, ended <-chan struc
 		case msg, ok := <-outgoing:
 			conn.SetWriteDeadline(time.Now().Add(writeWait))
 			if !ok {
-				// Channel has been closed
-				if err := conn.WriteMessage(websocket.CloseMessage, []byte{}); err != nil {
-					// log.Println("connWriter error (2) ", err)
-				}
+				conn.WriteMessage(websocket.CloseMessage, []byte{})
 				return
 			}
-			// log.Println("connWriter msg ", string(msg))
 			conn.WriteMessage(websocket.TextMessage, msg)
 		case <-ticker.C:
 			conn.SetWriteDeadline(time.Now().Add(writeWait))
 			if err := conn.WriteMessage(websocket.PingMessage, nil); err != nil {
-				// log.Println("connWriter error (3) ", err)
 				return
 			}
 		}
 	}
 }
 
-func websocketRawClient(conn *websocket.Conn) *rawClient {
+func websocketRawClient(conn *websocket.Conn) *client {
 	incoming := make(chan []byte)
 	outgoing := make(chan []byte)
 	ended := make(chan struct{})
@@ -85,5 +81,5 @@ func websocketRawClient(conn *websocket.Conn) *rawClient {
 	go connReader(conn, incoming, ended)
 	go connWriter(conn, outgoing, ended)
 
-	return &rawClient{incoming, outgoing, ended}
+	return &client{incoming, outgoing, ended}
 }

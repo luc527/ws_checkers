@@ -358,9 +358,9 @@ function connect() {
     currWs = ws
 
     if (version == null) {
-        setTimeout(machNew, 1000)
+        setTimeout(machNew, 200)
     } else {
-        setTimeout(machReconnect, 1000)
+        setTimeout(machConnect, 200)
     }
 
     ws.onopen = ev => {
@@ -387,7 +387,7 @@ function connect() {
             const board = parseBoard(msg.board)
             boardGui.update(board)
 
-            if (msg.whiteToPlay) {
+            if (msg.toPlay == 'white') {
                 const plies = msg.plies.map(parsePly)
                 pliesGui.update(plies)
             } else {
@@ -431,8 +431,8 @@ function machNew() {
     });
 }
 
-function machReconnect() {
-    send('mach/reconnect', {
+function machConnect() {
+    send('mach/connect', {
         id: id,
     })
 }

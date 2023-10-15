@@ -13,10 +13,15 @@ type messageEnvelope struct {
 	Raw  json.RawMessage `json:"data"`
 }
 
-// Outgoing
 type stringMessage struct {
 	Type    string `json:"type"`
 	Message string `json:"message"`
+}
+
+type idMessage struct {
+	Type  string    `json:"type"`
+	Id    uuid.UUID `json:"id"`
+	Token string    `json:"token,omitempty"`
 }
 
 func errorMessage(err string) stringMessage {
@@ -26,57 +31,48 @@ func errorMessage(err string) stringMessage {
 	}
 }
 
-// Outgoing
-type gameStateMessage struct {
-	Type        string          `json:"type"`
-	Version     int             `json:"version"`
-	Board       core.Board      `json:"board"`
-	WhiteToPlay bool            `json:"whiteToPlay"`
-	Result      core.GameResult `json:"result"`
-	Plies       []core.Ply      `json:"plies"`
-}
-
-// Incoming
-type plyMessage struct {
-	Version  int `json:"version"`
-	PlyIndex int `json:"ply"`
-}
-
-// Incoming
-type newMachineGameMessage struct {
-	HumanColor        core.Color       `json:"humanColor"`
-	CapturesMandatory core.CaptureRule `json:"captureMandatory"`
-	BestMandatory     core.BestRule    `json:"bestMandatory"`
-	TimeLimitMs       int              `json:"timeLimitMs,omitempty"`
-	Heuristic         string           `json:"heuristic,omitempty"`
-	// TODO: turn heuristic into minimax.Heuristic, implement MarshalJSON and UnmarshalJSON
-}
-
-func gameStateMessageFrom(s gameState) gameStateMessage {
-	return gameStateMessage{
-		Type:        "state",
-		Version:     s.v,
-		Board:       s.board,
-		WhiteToPlay: s.toPlay == core.WhiteColor,
-		Result:      s.result,
-		Plies:       s.plies,
-	}
-}
-
-// Outgoing
-type gameIdMessage struct {
-	Type string `json:"type"`
-	Id   string `json:"id"`
-}
-
-func gameIdMessageFrom(id uuid.UUID) gameIdMessage {
-	return gameIdMessage{
+func machIdMessage(id uuid.UUID) idMessage {
+	return idMessage{
 		Type: "id",
-		Id:   id.String(),
+		Id:   id,
 	}
 }
 
-// Incoming
-type reconnectMachineGameMessage struct {
-	Id string `json:"id"`
+type machNewData struct {
+	CapturesMandatory core.CaptureRule `json:"captureRule"`
+	BestMandatory     core.BestRule    `json:"bestRule"`
+	HumanColor        core.Color       `json:"humanColor"`
+	Heuristic         string           `json:"heuristic"`
+	TimeLimitMs       int              `json:"timeLimitMs"`
+}
+
+type gameStateMessage struct {
+	Type      string          `json:"type"`
+	Board     core.Board      `json:"board"`
+	Version   int             `json:"version"`
+	Result    core.GameResult `json:"result"`
+	ToPlay    core.Color      `json:"toPlay"`
+	Plies     []core.Ply      `json:"plies"`
+	YourColor core.Color      `json:"yourColor"`
+}
+
+func gameStateMessageFrom(s gameState, player core.Color) gameStateMessage {
+	return gameStateMessage{
+		Type:      "state",
+		Board:     s.board,
+		Version:   s.v,
+		Result:    s.result,
+		ToPlay:    s.toPlay,
+		Plies:     s.plies,
+		YourColor: player,
+	}
+}
+
+type plyData struct {
+	Version int `json:"version"`
+	Index   int `json:"ply"`
+}
+
+type machConnectData struct {
+	Id uuid.UUID `json:"id"`
 }
