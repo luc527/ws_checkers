@@ -1,6 +1,8 @@
 package main
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"testing"
 )
@@ -23,4 +25,12 @@ func tunmarshal(s string, x any, t *testing.T) {
 		t.Logf("failed to unmarshal %v, error: %v\n", s, err)
 		t.Fail()
 	}
+}
+
+func generateToken() (string, error) {
+	var bs [36]byte
+	if _, err := rand.Read(bs[:]); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(bs[:]), nil
 }

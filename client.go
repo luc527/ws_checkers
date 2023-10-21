@@ -2,170 +2,218 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"time"
 
+	"github.com/luc527/go_checkers/conc"
 	"github.com/luc527/go_checkers/core"
 	"github.com/luc527/go_checkers/minimax"
 )
 
 var (
-	machHub = NewMachineGameHub()
+	mhub = newMachHub(10 * time.Minute)
+	hhub = newHumanHub(10 * time.Minute)
 )
 
 type client struct {
 	incoming <-chan []byte
 	outgoing chan<- []byte
-	ended    <-chan struct{}
-	// TODO: could remove ended from here and let it be a connWriter/connReader implementation detail
 }
 
-type gameState struct {
-	v      int
-	board  core.Board
-	result core.GameResult
-	toPlay core.Color
-	plies  []core.Ply
-}
-
-func gameStateFrom(g *core.Game, v int) gameState {
-	return gameState{
-		v:      v,
-		board:  *g.Board(),
-		result: g.Result(),
-		toPlay: g.ToPlay(),
-		plies:  core.CopyPlies(g.Plies()),
-	}
-}
-
-func (c *client) errf(err string, a ...any) {
-	err = fmt.Sprintf(err, a...)
-	msg := errorMessage(err)
+func (c *client) error(err error) {
+	msg := errorMessage(err.Error())
 	if bs, err := json.Marshal(msg); err != nil {
-		log.Printf("client: failed to marshal error message: %v", err)
+		log.Printf("failed to marshal error: %v", err)
 	} else {
 		c.outgoing <- bs
 	}
 }
 
 func (c *client) handleFirstMessage() {
-	timer := time.NewTimer(60 * time.Second)
-	defer close(c.outgoing)
-
-	for {
-		select {
-		case <-timer.C:
-			c.errf("timeout")
+	for bs := range c.incoming {
+		var envelope messageEnvelope
+		if err := json.Unmarshal(bs, &envelope); err != nil {
+			c.error(err)
 			return
-		case bs, ok := <-c.incoming:
-			if !ok {
-				timer.Stop()
+		}
+		switch envelope.Type {
+		case "mach/new":
+			var data machNewData
+			if err := json.Unmarshal(envelope.Raw, &data); err != nil {
+				c.error(err)
 				return
+			} else {
+				c.startMachineGame(data)
 			}
-			var envelope messageEnvelope
-			if err := json.Unmarshal(bs, &envelope); err != nil {
-				c.errf("failed to unmarshal envelope: %v", err)
-				continue
+			return
+		case "mach/connect":
+			var data machConnectData
+			if err := json.Unmarshal(envelope.Raw, &data); err != nil {
+				c.error(err)
+				return
+			} else {
+				c.connectToMachineGame(data)
 			}
-			switch envelope.Type {
-			case "mach/new":
-				var data machNewData
-				if err := json.Unmarshal(envelope.Raw, &data); err != nil {
-					c.errf("mach/new: failed to unmarshal: %v", err)
-					continue
-				}
-				heuristic := minimax.HeuristicFromString(data.Heuristic)
-				if heuristic == nil {
-					c.errf("mach/new: unknown heuristic %q", data.Heuristic)
-					continue
-				}
-				if data.TimeLimitMs <= 0 {
-					c.errf("mach/new: negative time limit %dms", data.TimeLimitMs)
-					continue
-				}
-				timeLimit := time.Duration(data.TimeLimitMs * int(time.Millisecond))
-
-				mg, err := NewMachineGame(data.HumanColor, data.CapturesMandatory, data.BestMandatory, heuristic, timeLimit)
-				if err != nil {
-					c.errf("mach/new: failed to create game: %v", err)
-					continue
-				}
-
-				machId := machIdMessage(mg.id)
-				if bs, err := json.Marshal(machId); err != nil {
-					c.errf("mach/new: failed to marshal id: %v", err)
-					continue
-				} else {
-					c.outgoing <- bs
-				}
-
-				machHub.Register(mg)
-
-				timer.Stop()
-				c.playMachineGame(mg)
-
-			case "mach/connect":
-				var data machConnectData
-				if err := json.Unmarshal(envelope.Raw, &data); err != nil {
-					c.errf("mach/connect: failed to unmarshal: %v", err)
-					continue
-				}
-				id := data.Id
-				mg := machHub.Get(id)
-				if mg == nil {
-					c.errf("mach/connect: game not found: id %v", id)
-					continue
-				}
-				c.playMachineGame(mg)
+		case "human/new":
+			var data humanNewData
+			if err := json.Unmarshal(envelope.Raw, &data); err != nil {
+				c.error(err)
+				return
+			} else {
+				c.startHumanGame(data)
+			}
+		case "human/connect":
+			var data humanConnectData
+			if err := json.Unmarshal(envelope.Raw, &data); err != nil {
+				c.error(err)
+				return
+			} else {
+				c.connectToHumanGame(data)
 			}
 		}
 	}
 }
 
-func (c *client) playMachineGame(mg *MachineGame) {
-	states := make(chan gameState)
-	plies := make(chan plyData)
-	player := mg.humanPlayer
+func (c *client) startMachineGame(data machNewData) {
+	heuristic := minimax.HeuristicFromString(data.Heuristic)
+	if heuristic == nil {
+		c.error(fmt.Errorf("unknown heuristic %v", data.Heuristic))
+		return
+	}
 
-	go c.consumeStates(states, player)
-	go c.producePlies(plies)
+	if data.TimeLimitMs <= 0 {
+		c.error(errors.New("non-positive time limit"))
+		return
+	}
+	timeLimit := time.Duration(data.TimeLimitMs * int(time.Millisecond))
+	humanColor := data.HumanColor
 
-	mg.Register(states)
-	defer mg.Unregister(states)
+	mg, err := newMachGame(data.CapturesMandatory, data.BestMandatory, humanColor, heuristic, timeLimit)
+	if err != nil {
+		c.error(err)
+		return
+	}
 
-	for ply := range plies {
-		err := mg.DoPly(player, ply.Version, ply.Index)
-		if err != nil {
-			c.errf("invalid ply: %v", err)
+	mhub.register(mg)
+
+	c.trySend(machConnectedMessageFrom(humanColor, mg.id))
+	c.trySend(gameStateMessageFrom(mg.g.CurrentState(), humanColor))
+
+	states := mg.g.NextStates()
+	defer mg.g.Detach(states)
+	go c.consumeStates(states, humanColor)
+
+	c.runPlayer(humanColor, mg.g)
+}
+
+func (c *client) connectToMachineGame(data machConnectData) {
+	id := data.Id
+	mg, ok := mhub.get(id)
+	if !ok {
+		c.error(fmt.Errorf("mach/connect: game with id %q not found", id))
+		return
+	}
+	c.trySend(gameStateMessageFrom(mg.g.CurrentState(), mg.humanColor))
+
+	states := mg.g.NextStates()
+	defer mg.g.Detach(states)
+	go c.consumeStates(states, mg.humanColor)
+
+	c.runPlayer(mg.humanColor, mg.g)
+}
+
+func (c *client) startHumanGame(data humanNewData) {
+	hg, err := newHumanGame(data.CaptureRule, data.BestRule)
+	if err != nil {
+		c.error(err)
+		return
+	}
+
+	hhub.register(hg)
+
+	color := data.Color
+	yourToken, oponentToken := hg.tokens[color], hg.tokens[color.Opposite()]
+
+	c.trySend(humanCreatedMessageFrom(data.Color, hg.id, yourToken, oponentToken))
+	c.trySend(gameStateMessageFrom(hg.g.CurrentState(), color))
+
+	states := hg.g.NextStates()
+	defer hg.g.Detach(states)
+	go c.consumeStates(states, color)
+
+	c.runPlayer(color, hg.g)
+}
+
+func (c *client) connectToHumanGame(data humanConnectData) {
+	hg, ok := hhub.get(data.Id)
+	if !ok {
+		c.error(fmt.Errorf("unknown game with id %q", data.Id))
+		return
+	}
+
+	isWhiteToken := data.Token == hg.tokens[whiteColor]
+	isBlackToken := data.Token == hg.tokens[blackColor]
+
+	if !isWhiteToken && !isBlackToken {
+		c.error(errors.New("invalid token"))
+		return
+	}
+
+	var color core.Color
+	var token string
+	if isWhiteToken {
+		color = whiteColor
+		token = hg.tokens[whiteColor]
+	} else {
+		color = blackColor
+		token = hg.tokens[blackColor]
+	}
+
+	c.trySend(humanConnectedMessageFrom(color, hg.id, token))
+	c.trySend(gameStateMessageFrom(hg.g.CurrentState(), color))
+
+	states := hg.g.NextStates()
+	defer hg.g.Detach(states)
+	go c.consumeStates(states, color)
+
+	c.runPlayer(color, hg.g)
+}
+
+func (c *client) consumeStates(states <-chan conc.GameState, player core.Color) {
+	for s := range states {
+		c.trySend(gameStateMessageFrom(s, player))
+		if s.Result.Over() {
+			close(c.outgoing)
+			break
 		}
 	}
 }
 
-func (c *client) consumeStates(states <-chan gameState, player core.Color) {
-	for state := range states {
-		bs, err := json.Marshal(gameStateMessageFrom(state, player))
-		if err != nil {
-			c.errf("failed to marshal game state: %v", err)
-			continue
-		}
+func (c *client) trySend(v any) {
+	if bs, err := json.Marshal(v); err != nil {
+		c.error(err)
+	} else {
 		c.outgoing <- bs
 	}
 }
 
-func (c *client) producePlies(plies chan<- plyData) {
-	defer close(plies)
+func (c *client) runPlayer(color core.Color, g *conc.Game) {
 	for bs := range c.incoming {
 		var envelope messageEnvelope
 		if err := json.Unmarshal(bs, &envelope); err != nil {
-			c.errf("failed to unmarshal envelope for ply: %v", err)
+			c.error(err)
 			continue
 		}
 		var ply plyData
 		if err := json.Unmarshal(envelope.Raw, &ply); err != nil {
-			c.errf("failed to unmarshal ply: %v", err)
+			c.error(err)
 			continue
 		}
-		plies <- ply
+		version, index := ply.Version, ply.Index
+		if err := g.DoPlyIndex(color, version, index); err != nil {
+			c.error(err)
+		}
 	}
 }

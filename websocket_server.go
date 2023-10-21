@@ -81,5 +81,5 @@ func websocketRawClient(conn *websocket.Conn) *client {
 	go connReader(conn, incoming, ended)
 	go connWriter(conn, outgoing, ended)
 
-	return &client{incoming, outgoing, ended}
+	return &client{incoming, outgoing}
 }

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 
 	"github.com/google/uuid"
+	"github.com/luc527/go_checkers/conc"
 	"github.com/luc527/go_checkers/core"
 )
 
@@ -18,10 +19,25 @@ type stringMessage struct {
 	Message string `json:"message"`
 }
 
-type idMessage struct {
-	Type  string    `json:"type"`
-	Id    uuid.UUID `json:"id"`
-	Token string    `json:"token,omitempty"`
+type machConnectedMessage struct {
+	Type      string     `json:"type"`
+	Id        uuid.UUID  `json:"id"`
+	YourColor core.Color `json:"yourColor"`
+}
+
+type humanCreatedMessage struct {
+	Type         string     `json:"type"`
+	Id           uuid.UUID  `json:"id"`
+	YourColor    core.Color `json:"yourColor"`
+	YourToken    string     `json:"yourToken,omitempty"`
+	OponentToken string     `json:"oponentToken,omitempty"`
+}
+
+type humanConnectedMessage struct {
+	Type      string     `json:"type"`
+	Id        uuid.UUID  `json:"id"`
+	YourColor core.Color `json:"yourColor"`
+	YourToken string     `json:"yourToken,omitempty"`
 }
 
 func errorMessage(err string) stringMessage {
@@ -31,10 +47,30 @@ func errorMessage(err string) stringMessage {
 	}
 }
 
-func machIdMessage(id uuid.UUID) idMessage {
-	return idMessage{
-		Type: "id",
-		Id:   id,
+func machConnectedMessageFrom(color core.Color, id uuid.UUID) machConnectedMessage {
+	return machConnectedMessage{
+		Type:      "mach/connected",
+		Id:        id,
+		YourColor: color,
+	}
+}
+
+func humanCreatedMessageFrom(color core.Color, id uuid.UUID, yourToken string, oponentToken string) humanCreatedMessage {
+	return humanCreatedMessage{
+		Type:         "human/created",
+		Id:           id,
+		YourColor:    color,
+		YourToken:    yourToken,
+		OponentToken: oponentToken,
+	}
+}
+
+func humanConnectedMessageFrom(color core.Color, id uuid.UUID, token string) humanConnectedMessage {
+	return humanConnectedMessage{
+		Type:      "human/connected",
+		Id:        id,
+		YourColor: color,
+		YourToken: token,
 	}
 }
 
@@ -56,14 +92,14 @@ type gameStateMessage struct {
 	YourColor core.Color      `json:"yourColor"`
 }
 
-func gameStateMessageFrom(s gameState, player core.Color) gameStateMessage {
+func gameStateMessageFrom(s conc.GameState, player core.Color) gameStateMessage {
 	return gameStateMessage{
 		Type:      "state",
-		Board:     s.board,
-		Version:   s.v,
-		Result:    s.result,
-		ToPlay:    s.toPlay,
-		Plies:     s.plies,
+		Board:     s.Board,
+		Version:   s.Version,
+		Result:    s.Result,
+		ToPlay:    s.ToPlay,
+		Plies:     s.Plies,
 		YourColor: player,
 	}
 }
@@ -75,4 +111,15 @@ type plyData struct {
 
 type machConnectData struct {
 	Id uuid.UUID `json:"id"`
+}
+
+type humanNewData struct {
+	CaptureRule core.CaptureRule `json:"capturesMandatory"`
+	BestRule    core.BestRule    `json:"bestMandatory"`
+	Color       core.Color       `json:"color"`
+}
+
+type humanConnectData struct {
+	Id    uuid.UUID `json:"id"`
+	Token string    `json:"token"`
 }

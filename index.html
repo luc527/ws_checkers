@@ -9,6 +9,8 @@
             --cool-red: rgb(186, 49, 49);
         }
 
+        /* TODO: not showing difference between pawn and king */
+
         .container {
             width: calc(100vw - 5rem);
             margin: 1rem auto;
@@ -351,7 +353,13 @@ let currWs = null
 let version = null
 let id = null
 
+let yourColor = ''
+let yourToken = ''
+let oponentToken = ''
+
 connect()
+
+// TODO: finish adapting for human vs. human game
 
 function connect() {
     const ws = new WebSocket('ws://localhost:8080/ws')
@@ -380,14 +388,27 @@ function connect() {
 
         console.log('received', msg)
 
-        if (msg.type == 'id') {
+        if (msg.type == 'mach/connected') {
             id = msg.id
+            yourColor = msg.yourColor
+        }
+        else if (msg.type = 'human/connected') {
+            id = msg.id
+            yourToken = yourToken
+            yourColor = msg.yourColor
+        }
+        else if (msg.type = 'human/created') {
+            id = msg.id
+            yourToken = yourToken
+            yourColor = msg.yourColor
+            oponentToken = oponentToken
+            console.log({id, yourToken, oponentToken})
         }
         else if (msg.type == 'state') {
             const board = parseBoard(msg.board)
             boardGui.update(board)
 
-            if (msg.toPlay == 'white') {
+            if (msg.toPlay == yourColor) {
                 const plies = msg.plies.map(parsePly)
                 pliesGui.update(plies)
             } else {
