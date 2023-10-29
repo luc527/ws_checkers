@@ -5,47 +5,12 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/luc527/go_checkers/conc"
-	"github.com/luc527/go_checkers/core"
-)
-
-const (
-	whiteColor = core.WhiteColor
-	blackColor = core.BlackColor
 )
 
 type humanHub struct {
 	mu                sync.Mutex
 	games             map[uuid.UUID]*humanGame
 	inactivityTimeout time.Duration
-}
-
-type humanGame struct {
-	id     uuid.UUID
-	g      *conc.Game
-	tokens [2]string
-}
-
-func newHumanGame(cr core.CaptureRule, br core.BestRule) (*humanGame, error) {
-	id, err := uuid.NewRandom()
-	if err != nil {
-		return nil, err
-	}
-	tokenForWhite, err := generateToken()
-	if err != nil {
-		return nil, err
-	}
-	tokenForBlack, err := generateToken()
-	if err != nil {
-		return nil, err
-	}
-	g := conc.NewConcurrentGame(cr, br)
-	return &humanGame{
-		id, g, [2]string{
-			whiteColor: tokenForWhite,
-			blackColor: tokenForBlack,
-		},
-	}, nil
 }
 
 func newHumanHub(inactivityTimeout time.Duration) *humanHub {
@@ -60,8 +25,11 @@ func (h *humanHub) register(hg *humanGame) {
 	defer h.mu.Unlock()
 	h.games[hg.id] = hg
 
-	// TODO: copy-pasted from machine_game_hub; deduplicate?
-	// TODO: test
+	// TODO: when one connection makes the ply that ends the game,
+	// the game ends up finishing before we send the final game state to the other player
+
+	// the fix is to only really end the game when both players have disconnected
+
 	states := hg.g.NextStates()
 	go func() {
 		timer := time.NewTimer(h.inactivityTimeout)
@@ -69,6 +37,7 @@ func (h *humanHub) register(hg *humanGame) {
 			h.unregister(hg.id)
 			timer.Stop()
 			hg.g.DetachAll()
+			hg.conns.detachAll()
 		}()
 		for {
 			select {

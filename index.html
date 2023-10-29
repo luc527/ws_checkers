@@ -51,6 +51,7 @@
         .king-piece {
             width: 36px;
             height: 36px;
+            border-radius: 1rem;
         }
 
         .pawn-piece {
@@ -353,23 +354,13 @@ let currWs = null
 let version = null
 let id = null
 
-let yourColor = ''
-let yourToken = ''
+let myColor = ''
+let myToken = ''
 let oponentToken = ''
-
-connect()
-
-// TODO: finish adapting for human vs. human game
 
 function connect() {
     const ws = new WebSocket('ws://localhost:8080/ws')
     currWs = ws
-
-    if (version == null) {
-        setTimeout(machNew, 200)
-    } else {
-        setTimeout(machConnect, 200)
-    }
 
     ws.onopen = ev => {
         console.log('websocket open', ev)
@@ -388,37 +379,35 @@ function connect() {
 
         console.log('received', msg)
 
-        if (msg.type == 'mach/connected') {
-            id = msg.id
-            yourColor = msg.yourColor
-        }
-        else if (msg.type = 'human/connected') {
-            id = msg.id
-            yourToken = yourToken
-            yourColor = msg.yourColor
-        }
-        else if (msg.type = 'human/created') {
-            id = msg.id
-            yourToken = yourToken
-            yourColor = msg.yourColor
-            oponentToken = oponentToken
-            console.log({id, yourToken, oponentToken})
-        }
-        else if (msg.type == 'state') {
-            const board = parseBoard(msg.board)
-            boardGui.update(board)
+        switch (msg.type) {
+        case 'human/created':
+            id = msg.id;
+            myColor = msg.yourColor;
+            myToken = msg.yourToken;
+            opponentToken = msg.opponentToken;
+            break;
 
-            if (msg.toPlay == yourColor) {
-                const plies = msg.plies.map(parsePly)
-                pliesGui.update(plies)
+        case 'human/connected':
+            id = msg.id;
+            myColor = msg.yourColor;
+            break;
+
+        case 'mach/connected':
+            id = msg.id;
+            myColor = msg.yourColor;
+            break;
+
+        case 'state':
+            boardGui.update(parseBoard(msg.board))
+            if (msg.toPlay == myColor) {
+                pliesGui.update(msg.plies.map(parsePly))
             } else {
                 pliesGui.clear()
             }
-
             version = msg.version
+            break;
         }
     }
-
 }
 
 function reconnect() {
@@ -445,8 +434,6 @@ function ply(i) {
 function machNew() {
     send('mach/new', {
         humanColor: 'white',
-        captureMandatory: true,
-        bestMandatory: false,
         timeLimitMs: 1000,
         heuristic: 'UnweightedCount'
     });
@@ -456,6 +443,14 @@ function machConnect() {
     send('mach/connect', {
         id: id,
     })
+}
+
+function humanNew(color) {
+    send('human/new', {color})
+}
+
+function humanConnect(id, token) {
+    send('human/connect', {id, token})
 }
 </script>
 

@@ -75,11 +75,9 @@ func humanConnectedMessageFrom(color core.Color, id uuid.UUID, token string) hum
 }
 
 type machNewData struct {
-	CapturesMandatory core.CaptureRule `json:"captureRule"`
-	BestMandatory     core.BestRule    `json:"bestRule"`
-	HumanColor        core.Color       `json:"humanColor"`
-	Heuristic         string           `json:"heuristic"`
-	TimeLimitMs       int              `json:"timeLimitMs"`
+	HumanColor  core.Color `json:"humanColor"`
+	Heuristic   string     `json:"heuristic"`
+	TimeLimitMs int        `json:"timeLimitMs"`
 }
 
 type gameStateMessage struct {
@@ -114,12 +112,24 @@ type machConnectData struct {
 }
 
 type humanNewData struct {
-	CaptureRule core.CaptureRule `json:"capturesMandatory"`
-	BestRule    core.BestRule    `json:"bestMandatory"`
-	Color       core.Color       `json:"color"`
+	Color core.Color `json:"color"`
 }
 
 type humanConnectData struct {
 	Id    uuid.UUID `json:"id"`
 	Token string    `json:"token"`
+}
+
+type playerConnStateMessage struct {
+	Type     string          `json:"type"`
+	Opponent core.Color      `json:"opponent"`
+	State    playerConnState `json:"state"`
+}
+
+func playerConnStateMessageFrom(s playerConnState, opponent core.Color) playerConnStateMessage {
+	return playerConnStateMessage{
+		Type:     "conn",
+		Opponent: opponent,
+		State:    s,
+	}
 }

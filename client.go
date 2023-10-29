@@ -90,7 +90,7 @@ func (c *client) startMachineGame(data machNewData) {
 	timeLimit := time.Duration(data.TimeLimitMs * int(time.Millisecond))
 	humanColor := data.HumanColor
 
-	mg, err := newMachGame(data.CapturesMandatory, data.BestMandatory, humanColor, heuristic, timeLimit)
+	mg, err := newMachGame(humanColor, heuristic, timeLimit)
 	if err != nil {
 		c.error(err)
 		return
@@ -125,7 +125,7 @@ func (c *client) connectToMachineGame(data machConnectData) {
 }
 
 func (c *client) startHumanGame(data humanNewData) {
-	hg, err := newHumanGame(data.CaptureRule, data.BestRule)
+	hg, err := newHumanGame()
 	if err != nil {
 		c.error(err)
 		return
@@ -134,14 +134,21 @@ func (c *client) startHumanGame(data humanNewData) {
 	hhub.register(hg)
 
 	color := data.Color
-	yourToken, oponentToken := hg.tokens[color], hg.tokens[color.Opposite()]
+	opponent := color.Opposite()
+	yourToken, oponentToken := hg.tokens[color], hg.tokens[opponent]
 
 	c.trySend(humanCreatedMessageFrom(data.Color, hg.id, yourToken, oponentToken))
 	c.trySend(gameStateMessageFrom(hg.g.CurrentState(), color))
 
+	hg.conns.enter(color)
+
 	states := hg.g.NextStates()
 	defer hg.g.Detach(states)
 	go c.consumeStates(states, color)
+
+	opponentConn := hg.conns.channel(opponent)
+	defer hg.conns.detach(opponent, opponentConn)
+	go c.consumeConnStates(opponentConn, opponent)
 
 	c.runPlayer(color, hg.g)
 }
@@ -170,6 +177,7 @@ func (c *client) connectToHumanGame(data humanConnectData) {
 		color = blackColor
 		token = hg.tokens[blackColor]
 	}
+	opponent := color.Opposite()
 
 	c.trySend(humanConnectedMessageFrom(color, hg.id, token))
 	c.trySend(gameStateMessageFrom(hg.g.CurrentState(), color))
@@ -177,6 +185,10 @@ func (c *client) connectToHumanGame(data humanConnectData) {
 	states := hg.g.NextStates()
 	defer hg.g.Detach(states)
 	go c.consumeStates(states, color)
+
+	connStates := hg.conns.channel(opponent)
+	defer hg.conns.detach(opponent, connStates)
+	go c.consumeConnStates(connStates, opponent)
 
 	c.runPlayer(color, hg.g)
 }
@@ -188,6 +200,12 @@ func (c *client) consumeStates(states <-chan conc.GameState, player core.Color) 
 			close(c.outgoing)
 			break
 		}
+	}
+}
+
+func (c *client) consumeConnStates(states <-chan playerConnState, opponent core.Color) {
+	for s := range states {
+		c.trySend(playerConnStateMessageFrom(s, opponent))
 	}
 }
 
