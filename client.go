@@ -139,8 +139,10 @@ func (c *client) startHumanGame(data humanNewData) {
 
 	c.trySend(humanCreatedMessageFrom(data.Color, hg.id, yourToken, oponentToken))
 	c.trySend(gameStateMessageFrom(hg.g.CurrentState(), color))
+	c.trySend(playerConnStateMessageFrom(hg.conns.current(opponent), opponent))
 
 	hg.conns.enter(color)
+	defer hg.conns.exit(color)
 
 	states := hg.g.NextStates()
 	defer hg.g.Detach(states)
@@ -179,8 +181,12 @@ func (c *client) connectToHumanGame(data humanConnectData) {
 	}
 	opponent := color.Opposite()
 
+	hg.conns.enter(color)
+	defer hg.conns.exit(color)
+
 	c.trySend(humanConnectedMessageFrom(color, hg.id, token))
 	c.trySend(gameStateMessageFrom(hg.g.CurrentState(), color))
+	c.trySend(playerConnStateMessageFrom(hg.conns.current(opponent), opponent))
 
 	states := hg.g.NextStates()
 	defer hg.g.Detach(states)

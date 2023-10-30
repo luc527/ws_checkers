@@ -25,6 +25,17 @@ type playerConnStates struct {
 	chans  [2]map[chan playerConnState]bool
 }
 
+func (s playerConnState) String() string {
+	switch s {
+	case playerOffline:
+		return "offline"
+	case playerOnline:
+		return "online"
+	}
+	// unreachable
+	return ""
+}
+
 func (s *playerConnStates) init() {
 	s.chans[whiteColor] = make(map[chan playerConnState]bool)
 	s.chans[blackColor] = make(map[chan playerConnState]bool)

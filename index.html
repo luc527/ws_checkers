@@ -108,11 +108,53 @@
             cursor: pointer;
         }
 
+        .status-container {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            font-family: 'Inter', sans-serif;
+            font-weight: bold;
+        }
+
+        .player-status {
+            display: flex;
+            flex-direction: row;
+            align-items: center;
+            gap: 1rem;
+            padding: 0.5rem;
+            border: 0.2rem gray solid;
+            color: gray;
+            background-color: lightgray;
+            border-radius: 0.8rem;
+        }
+
+        .status-indicator {
+            margin-left: auto;
+            border-radius: 100%;
+            width: 1rem;
+            height: 1rem;
+            background-color: black;
+        }
+
+        .status-indicator.online {
+            background-color: #0c0;
+        }
+
     </style>
 </head>
 <body>
 
     <div class="container">
+        <div class="status-container">
+            <div class="player-status">
+                <span>You</span>
+                <div class="status-indicator" id="my-status-indicator"></div>
+            </div>
+            <div class="player-status">
+                <span>Opponent</span>
+                <div class="status-indicator" id="opponent-status-indicator"></div>
+            </div>
+        </div>
         <div class="game-container"></div>
         <div class="plies-container"></div>
     </div>
@@ -347,6 +389,24 @@ function capitalize(s) {
     return s.substring(0, 1).toUpperCase() + s.substring(1)
 }
 
+function setStatus(who, online) {
+    const selector = `#${who == 'me' ? 'my' : 'opponent'}-status-indicator`
+    const indicator = document.querySelector(selector)
+    if (online) {
+        indicator.classList.add('online')
+    } else {
+        indicator.classList.remove('online')
+    }
+}
+
+function online(who) {
+    setStatus(who, true)
+}
+
+function offline(who) {
+    setStatus(who, false)
+}
+
 const boardGui = new BoardGui(document.querySelector('.game-container'))
 const pliesGui = new PliesGui(document.querySelector('.plies-container'), ply)
 
@@ -362,16 +422,21 @@ function connect() {
     const ws = new WebSocket('ws://localhost:8080/ws')
     currWs = ws
 
+    online('me')
+
     ws.onopen = ev => {
         console.log('websocket open', ev)
     }
 
     ws.onerror = ev => {
         console.log('websocket error', ev)
+        offline('me')
     }
 
     ws.onclose = ev => {
         console.log('websocket close', ev)
+        offline('me')
+        offline('opponent')
     }
 
     ws.onmessage = ev => {
@@ -385,6 +450,8 @@ function connect() {
             myColor = msg.yourColor;
             myToken = msg.yourToken;
             opponentToken = msg.opponentToken;
+            console.log('id', id)
+            console.log('token', opponentToken)
             break;
 
         case 'human/connected':
@@ -395,6 +462,10 @@ function connect() {
         case 'mach/connected':
             id = msg.id;
             myColor = msg.yourColor;
+            break;
+
+        case 'status':
+            setStatus('opponent', msg.status == 'online')
             break;
 
         case 'state':

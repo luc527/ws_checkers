@@ -8,6 +8,8 @@ import (
 	"github.com/gorilla/websocket"
 )
 
+// TODO: debug hubs to check whether memory is being freed correctly in all instances
+
 var addr = flag.String("addr", ":8080", "http service address")
 
 func runServer() {

@@ -123,13 +123,17 @@ type humanConnectData struct {
 type playerConnStateMessage struct {
 	Type     string          `json:"type"`
 	Opponent core.Color      `json:"opponent"`
-	State    playerConnState `json:"state"`
+	State    playerConnState `json:"status"`
 }
 
 func playerConnStateMessageFrom(s playerConnState, opponent core.Color) playerConnStateMessage {
 	return playerConnStateMessage{
-		Type:     "conn",
+		Type:     "status",
 		Opponent: opponent,
 		State:    s,
 	}
 }
+
+// TODO: more specific names
+// state -> gameState
+// status -> connState  (for client-server nomenclature consistency, but maybe playerStatus is better)
