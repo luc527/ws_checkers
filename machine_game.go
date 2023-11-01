@@ -16,6 +16,7 @@ type machGame struct {
 	searcher     minimax.Searcher
 	humanColor   core.Color
 	machineColor core.Color
+	status       *playerStatus
 }
 
 func newMachGame(
@@ -34,7 +35,7 @@ func newMachGame(
 		TimeLimit: timeLimit,
 		Heuristic: heuristic,
 	}
-	return &machGame{id, g, searcher, humanColor, machineColor}, nil
+	return &machGame{id, g, searcher, humanColor, machineColor, newPlayerStatus()}, nil
 }
 
 func (mg *machGame) runMachine(states <-chan conc.GameState) {

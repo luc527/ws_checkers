@@ -2,14 +2,11 @@ package main
 
 import (
 	"encoding/json"
-	"errors"
-	"fmt"
 	"log"
 	"time"
 
 	"github.com/luc527/go_checkers/conc"
 	"github.com/luc527/go_checkers/core"
-	"github.com/luc527/go_checkers/minimax"
 )
 
 var (
@@ -76,145 +73,6 @@ func (c *client) handleFirstMessage() {
 	}
 }
 
-func (c *client) startMachineGame(data machNewData) {
-	heuristic := minimax.HeuristicFromString(data.Heuristic)
-	if heuristic == nil {
-		c.error(fmt.Errorf("unknown heuristic %v", data.Heuristic))
-		return
-	}
-
-	if data.TimeLimitMs <= 0 {
-		c.error(errors.New("non-positive time limit"))
-		return
-	}
-	timeLimit := time.Duration(data.TimeLimitMs * int(time.Millisecond))
-	humanColor := data.HumanColor
-
-	mg, err := newMachGame(humanColor, heuristic, timeLimit)
-	if err != nil {
-		c.error(err)
-		return
-	}
-
-	mhub.register(mg)
-
-	c.trySend(machConnectedMessageFrom(humanColor, mg.id))
-	c.trySend(gameStateMessageFrom(mg.g.CurrentState(), humanColor))
-
-	states := mg.g.NextStates()
-	defer mg.g.Detach(states)
-	go c.consumeStates(states, humanColor)
-
-	c.runPlayer(humanColor, mg.g)
-}
-
-func (c *client) connectToMachineGame(data machConnectData) {
-	id := data.Id
-	mg, ok := mhub.get(id)
-	if !ok {
-		c.error(fmt.Errorf("mach/connect: game with id %q not found", id))
-		return
-	}
-	c.trySend(gameStateMessageFrom(mg.g.CurrentState(), mg.humanColor))
-
-	states := mg.g.NextStates()
-	defer mg.g.Detach(states)
-	go c.consumeStates(states, mg.humanColor)
-
-	c.runPlayer(mg.humanColor, mg.g)
-}
-
-func (c *client) startHumanGame(data humanNewData) {
-	hg, err := newHumanGame()
-	if err != nil {
-		c.error(err)
-		return
-	}
-
-	hhub.register(hg)
-
-	color := data.Color
-	opponent := color.Opposite()
-	yourToken, oponentToken := hg.tokens[color], hg.tokens[opponent]
-
-	c.trySend(humanCreatedMessageFrom(data.Color, hg.id, yourToken, oponentToken))
-	c.trySend(gameStateMessageFrom(hg.g.CurrentState(), color))
-	c.trySend(playerConnStateMessageFrom(hg.conns.current(opponent), opponent))
-
-	hg.conns.enter(color)
-	defer hg.conns.exit(color)
-
-	states := hg.g.NextStates()
-	defer hg.g.Detach(states)
-	go c.consumeStates(states, color)
-
-	opponentConn := hg.conns.channel(opponent)
-	defer hg.conns.detach(opponent, opponentConn)
-	go c.consumeConnStates(opponentConn, opponent)
-
-	c.runPlayer(color, hg.g)
-}
-
-func (c *client) connectToHumanGame(data humanConnectData) {
-	hg, ok := hhub.get(data.Id)
-	if !ok {
-		c.error(fmt.Errorf("unknown game with id %q", data.Id))
-		return
-	}
-
-	isWhiteToken := data.Token == hg.tokens[whiteColor]
-	isBlackToken := data.Token == hg.tokens[blackColor]
-
-	if !isWhiteToken && !isBlackToken {
-		c.error(errors.New("invalid token"))
-		return
-	}
-
-	var color core.Color
-	var token string
-	if isWhiteToken {
-		color = whiteColor
-		token = hg.tokens[whiteColor]
-	} else {
-		color = blackColor
-		token = hg.tokens[blackColor]
-	}
-	opponent := color.Opposite()
-
-	hg.conns.enter(color)
-	defer hg.conns.exit(color)
-
-	c.trySend(humanConnectedMessageFrom(color, hg.id, token))
-	c.trySend(gameStateMessageFrom(hg.g.CurrentState(), color))
-	c.trySend(playerConnStateMessageFrom(hg.conns.current(opponent), opponent))
-
-	states := hg.g.NextStates()
-	defer hg.g.Detach(states)
-	go c.consumeStates(states, color)
-
-	connStates := hg.conns.channel(opponent)
-	defer hg.conns.detach(opponent, connStates)
-	go c.consumeConnStates(connStates, opponent)
-
-	c.runPlayer(color, hg.g)
-}
-
-func (c *client) consumeStates(states <-chan conc.GameState, player core.Color) {
-	for s := range states {
-		c.trySend(gameStateMessageFrom(s, player))
-		if s.Result.Over() {
-			close(c.outgoing)
-			break
-		}
-	}
-}
-
-func (c *client) consumeConnStates(states <-chan playerConnState, opponent core.Color) {
-	for s := range states {
-		c.trySend(playerConnStateMessageFrom(s, opponent))
-	}
-}
-
 func (c *client) trySend(v any) {
 	if bs, err := json.Marshal(v); err != nil {
 		c.error(err)
@@ -239,5 +97,21 @@ func (c *client) runPlayer(color core.Color, g *conc.Game) {
 		if err := g.DoPlyIndex(color, version, index); err != nil {
 			c.error(err)
 		}
+	}
+}
+
+func (c *client) consumeGameStates(player core.Color, states <-chan conc.GameState) {
+	for state := range states {
+		c.trySend(gameStateMessageFrom(state, player))
+		if state.Result.Over() {
+			close(c.outgoing)
+			return
+		}
+	}
+}
+
+func (c *client) consumePlayerStatus(player core.Color, status <-chan bool) {
+	for online := range status {
+		c.trySend(playerStatusMessageFrom(player, online))
 	}
 }

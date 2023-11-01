@@ -1,6 +1,9 @@
 package main
 
+// TODO: same counting technique being used in human game for closing game only when all players have disconnected
+
 import (
+	"log"
 	"sync"
 	"time"
 
@@ -34,24 +37,55 @@ func (h *machHub) register(mg *machGame) {
 	go mg.runMachine(mg.g.NextStates())
 
 	statesForActivity := mg.g.NextStates()
+
 	go func() {
-		timer := time.NewTimer(h.inactivityTimeout)
-		defer func() {
-			h.unregister(mg.id)
-			timer.Stop()
-			mg.g.DetachAll()
-		}()
-		for {
+		var timer *time.Timer
+
+		// stop game if there's no activity
+
+		timer = time.NewTimer(h.inactivityTimeout)
+		over := false
+		for !over {
 			select {
 			case <-timer.C:
-				return
+				over = true
 			case _, ok := <-statesForActivity:
-				if !ok {
-					return
+				if ok {
+					timer.Reset(h.inactivityTimeout)
+				} else {
+					over = true
 				}
-				timer.Reset(h.inactivityTimeout)
 			}
 		}
+
+		log.Println("game ended (over or timed out)")
+
+		h.unregister(mg.id)
+		mg.g.Detach(statesForActivity)
+		timer.Stop()
+
+		// wait for player to close its connection,
+		// again with a timeout
+
+		defer mg.g.DetachAll()
+
+		if !mg.status.isOnline() {
+			log.Println("player already offline, goodbye")
+			return
+		}
+		status := mg.status.channel()
+
+		timer = time.NewTimer(h.inactivityTimeout)
+		online := true
+		for online {
+			select {
+			case <-timer.C:
+				online = false
+			case online = <-status:
+			}
+		}
+
+		log.Println("finally player offline, goodbye")
 	}()
 }
 

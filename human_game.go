@@ -12,10 +12,10 @@ const (
 )
 
 type humanGame struct {
-	id     uuid.UUID
-	g      *conc.Game
-	tokens [2]string
-	conns  playerConnStates
+	id       uuid.UUID
+	g        *conc.Game
+	tokens   [2]string
+	statuses [2]*playerStatus
 }
 
 func newHumanGame() (*humanGame, error) {
@@ -39,7 +39,10 @@ func newHumanGame() (*humanGame, error) {
 			whiteColor: tokenForWhite,
 			blackColor: tokenForBlack,
 		},
+		statuses: [2]*playerStatus{
+			whiteColor: newPlayerStatus(),
+			blackColor: newPlayerStatus(),
+		},
 	}
-	hg.conns.init()
 	return hg, nil
 }

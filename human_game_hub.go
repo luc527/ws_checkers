@@ -25,29 +25,54 @@ func (h *humanHub) register(hg *humanGame) {
 	defer h.mu.Unlock()
 	h.games[hg.id] = hg
 
-	// TODO: when one connection makes the ply that ends the game,
-	// the game ends up finishing before we send the final game state to the other player
+	statesForActivity := hg.g.NextStates()
 
-	// the fix is to only really end the game when both players have disconnected
-
-	states := hg.g.NextStates()
 	go func() {
-		timer := time.NewTimer(h.inactivityTimeout)
-		defer func() {
-			h.unregister(hg.id)
-			timer.Stop()
-			hg.g.DetachAll()
-			hg.conns.detachAll()
-		}()
-		for {
+		var timer *time.Timer
+
+		over := false
+		timer = time.NewTimer(h.inactivityTimeout)
+		for !over {
 			select {
 			case <-timer.C:
-				return
-			case _, ok := <-states:
-				if !ok {
-					return
+				over = true
+			case _, ok := <-statesForActivity:
+				if ok {
+					timer.Reset(h.inactivityTimeout)
+				} else {
+					over = true
 				}
-				timer.Reset(h.inactivityTimeout)
+			}
+		}
+
+		h.unregister(hg.id)
+		hg.g.Detach(statesForActivity)
+		timer.Stop()
+
+		defer hg.g.DetachAll()
+
+		whiteOnline := hg.statuses[whiteColor].isOnline()
+		blackOnline := hg.statuses[blackColor].isOnline()
+
+		if !whiteOnline && !blackOnline {
+			return
+		}
+
+		whiteStatuses := hg.statuses[whiteColor].channel()
+		blackStatuses := hg.statuses[whiteColor].channel()
+
+		defer hg.statuses[whiteColor].detach(whiteStatuses)
+		defer hg.statuses[blackColor].detach(blackStatuses)
+
+		timer = time.NewTimer(h.inactivityTimeout)
+		for whiteOnline || blackOnline {
+			select {
+			case <-timer.C:
+				// disconnect forcefully
+				whiteOnline = false
+				blackOnline = false
+			case whiteOnline = <-whiteStatuses:
+			case blackOnline = <-blackStatuses:
 			}
 		}
 	}()

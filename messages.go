@@ -120,17 +120,17 @@ type humanConnectData struct {
 	Token string    `json:"token"`
 }
 
-type playerConnStateMessage struct {
-	Type     string          `json:"type"`
-	Opponent core.Color      `json:"opponent"`
-	State    playerConnState `json:"status"`
+type playerStatusMessage struct {
+	Type   string     `json:"type"`
+	Player core.Color `json:"player"`
+	Online bool       `json:"online"`
 }
 
-func playerConnStateMessageFrom(s playerConnState, opponent core.Color) playerConnStateMessage {
-	return playerConnStateMessage{
-		Type:     "status",
-		Opponent: opponent,
-		State:    s,
+func playerStatusMessageFrom(player core.Color, online bool) playerStatusMessage {
+	return playerStatusMessage{
+		Type:   "playerStatus",
+		Player: player,
+		Online: online,
 	}
 }
 

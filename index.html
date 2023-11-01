@@ -464,8 +464,8 @@ function connect() {
             myColor = msg.yourColor;
             break;
 
-        case 'status':
-            setStatus('opponent', msg.status == 'online')
+        case 'playerStatus':
+            setStatus('opponent', msg.online)
             break;
 
         case 'state':
