@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 
 	"github.com/google/uuid"
-	"github.com/luc527/go_checkers/conc"
 	"github.com/luc527/go_checkers/core"
 )
 
@@ -90,14 +89,14 @@ type gameStateMessage struct {
 	YourColor core.Color      `json:"yourColor"`
 }
 
-func gameStateMessageFrom(s conc.GameState, player core.Color) gameStateMessage {
+func gameStateMessageFrom(s gameState, player core.Color) gameStateMessage {
 	return gameStateMessage{
 		Type:      "state",
-		Board:     s.Board,
-		Version:   s.Version,
-		Result:    s.Result,
-		ToPlay:    s.ToPlay,
-		Plies:     s.Plies,
+		Board:     s.board,
+		Version:   s.version,
+		Result:    s.result,
+		ToPlay:    s.toPlay,
+		Plies:     s.plies,
 		YourColor: player,
 	}
 }

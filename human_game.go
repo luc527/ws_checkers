@@ -1,8 +1,9 @@
 package main
 
 import (
+	"sync"
+
 	"github.com/google/uuid"
-	"github.com/luc527/go_checkers/conc"
 	"github.com/luc527/go_checkers/core"
 )
 
@@ -11,11 +12,15 @@ const (
 	blackColor = core.BlackColor
 )
 
+var (
+	humanMu    = sync.Mutex{}
+	humanGames = make(map[uuid.UUID]*humanGame)
+)
+
 type humanGame struct {
-	id       uuid.UUID
-	g        *conc.Game
-	tokens   [2]string
-	statuses [2]*playerStatus
+	id uuid.UUID
+	*conGame
+	tokens [2]string
 }
 
 func newHumanGame() (*humanGame, error) {
@@ -23,26 +28,93 @@ func newHumanGame() (*humanGame, error) {
 	if err != nil {
 		return nil, err
 	}
-	tokenForWhite, err := generateToken()
-	if err != nil {
-		return nil, err
-	}
-	tokenForBlack, err := generateToken()
-	if err != nil {
-		return nil, err
-	}
-	g := conc.NewConcurrentGame()
 	hg := &humanGame{
-		id: id,
-		g:  g,
+		id:      id,
+		conGame: newConGame(),
 		tokens: [2]string{
-			whiteColor: tokenForWhite,
-			blackColor: tokenForBlack,
-		},
-		statuses: [2]*playerStatus{
-			whiteColor: newPlayerStatus(),
-			blackColor: newPlayerStatus(),
+			whiteColor: "",
+			blackColor: "",
 		},
 	}
 	return hg, nil
+}
+
+func (c *client) startHumanGame(data humanNewData) {
+	color := data.Color
+
+	hg, err := newHumanGame()
+	if err != nil {
+		c.err(err)
+		return
+	}
+
+	whiteToken, err := genToken()
+	if err != nil {
+		c.err(err)
+		return
+	}
+	blackToken, err := genToken()
+	if err != nil {
+		c.err(err)
+		return
+	}
+
+	humanMu.Lock()
+	humanGames[hg.id] = hg
+	humanMu.Unlock()
+
+	// TODO: timeout left out, let's just hope everyone disconnects
+	go func() {
+		states := hg.conGame.channel()
+		for s := range states {
+			if s.result.Over() {
+				humanMu.Lock()
+				delete(humanGames, hg.id)
+				humanMu.Unlock()
+				hg.conGame.detach(states)
+			}
+		}
+	}()
+
+	hg.tokens[whiteColor] = whiteToken
+	hg.tokens[blackColor] = blackToken
+
+	c.trySend(humanCreatedMessageFrom(color, hg.id, hg.tokens[color], hg.tokens[color.Opposite()]))
+	c.trySend(gameStateMessageFrom(hg.conGame.current(), color))
+
+	states := hg.conGame.channel()
+	go c.consumeGameStates(color, states)
+
+	c.runPlayer(color, hg.conGame)
+	hg.detach(states)
+}
+
+func (c *client) connectToHumanGame(data humanConnectData) {
+	humanMu.Lock()
+	hg := humanGames[data.Id]
+	humanMu.Unlock()
+
+	if hg == nil {
+		c.errorf("game with id %v not found", data.Id)
+		return
+	}
+
+	var color core.Color
+	if data.Token == hg.tokens[whiteColor] {
+		color = whiteColor
+	} else if data.Token == hg.tokens[blackColor] {
+		color = blackColor
+	} else {
+		c.errorf("invalid token %v", data.Token)
+		return
+	}
+
+	c.trySend(humanConnectedMessageFrom(color, data.Id, data.Token))
+	c.trySend(gameStateMessageFrom(hg.conGame.current(), color))
+
+	states := hg.conGame.channel()
+	go c.consumeGameStates(color, states)
+
+	c.runPlayer(color, hg.conGame)
+	hg.detach(states)
 }

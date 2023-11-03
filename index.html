@@ -510,10 +510,8 @@ function machNew() {
     });
 }
 
-function machConnect() {
-    send('mach/connect', {
-        id: id,
-    })
+function machConnect(id) {
+    send('mach/connect', {id})
 }
 
 function humanNew(color) {
