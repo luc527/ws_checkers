@@ -68,16 +68,6 @@ func (g *conGame) detach(c chan gameState) {
 	}
 }
 
-func (g *conGame) detachAll() {
-	g.chansMu.Lock()
-	defer g.chansMu.Unlock()
-
-	for c := range g.chans {
-		delete(g.chans, c)
-		close(c)
-	}
-}
-
 func (g *conGame) update(s gameState) {
 	g.chansMu.Lock()
 	defer g.chansMu.Unlock()

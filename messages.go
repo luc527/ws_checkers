@@ -25,18 +25,18 @@ type machConnectedMessage struct {
 }
 
 type humanCreatedMessage struct {
-	Type         string     `json:"type"`
-	Id           uuid.UUID  `json:"id"`
-	YourColor    core.Color `json:"yourColor"`
-	YourToken    string     `json:"yourToken,omitempty"`
-	OponentToken string     `json:"oponentToken,omitempty"`
+	Type          string     `json:"type"`
+	Id            uuid.UUID  `json:"id"`
+	YourColor     core.Color `json:"yourColor"`
+	YourToken     string     `json:"yourToken"`
+	OpponentToken string     `json:"opponentToken"`
 }
 
 type humanConnectedMessage struct {
 	Type      string     `json:"type"`
 	Id        uuid.UUID  `json:"id"`
 	YourColor core.Color `json:"yourColor"`
-	YourToken string     `json:"yourToken,omitempty"`
+	YourToken string     `json:"yourToken"`
 }
 
 func errorMessage(err string) stringMessage {
@@ -54,13 +54,13 @@ func machConnectedMessageFrom(color core.Color, id uuid.UUID) machConnectedMessa
 	}
 }
 
-func humanCreatedMessageFrom(color core.Color, id uuid.UUID, yourToken string, oponentToken string) humanCreatedMessage {
+func humanCreatedMessageFrom(color core.Color, id uuid.UUID, yourToken string, OpponentToken string) humanCreatedMessage {
 	return humanCreatedMessage{
-		Type:         "human/created",
-		Id:           id,
-		YourColor:    color,
-		YourToken:    yourToken,
-		OponentToken: oponentToken,
+		Type:          "human/created",
+		Id:            id,
+		YourColor:     color,
+		YourToken:     yourToken,
+		OpponentToken: OpponentToken,
 	}
 }
 
@@ -118,21 +118,3 @@ type humanConnectData struct {
 	Id    uuid.UUID `json:"id"`
 	Token string    `json:"token"`
 }
-
-type playerStatusMessage struct {
-	Type   string     `json:"type"`
-	Player core.Color `json:"player"`
-	Online bool       `json:"online"`
-}
-
-func playerStatusMessageFrom(player core.Color, online bool) playerStatusMessage {
-	return playerStatusMessage{
-		Type:   "playerStatus",
-		Player: player,
-		Online: online,
-	}
-}
-
-// TODO: more specific names
-// state -> gameState
-// status -> connState  (for client-server nomenclature consistency, but maybe playerStatus is better)
