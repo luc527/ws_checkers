@@ -63,7 +63,6 @@ func (c *client) startHumanGame(data humanNewData) {
 	humanGames[hg.id] = hg
 	humanMu.Unlock()
 
-	// TODO: timeout left out, let's just hope everyone disconnects
 	go func() {
 		states := hg.conGame.channel()
 		for s := range states {

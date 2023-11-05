@@ -37,10 +37,6 @@ func newMachGame(searcher minimax.Searcher, humanColor core.Color) (*machGame, e
 	return mg, nil
 }
 
-func (mg *machGame) doHumanPly(version int, index int) error {
-	return mg.conGame.doIndexPly(mg.humanColor, version, index)
-}
-
 func (mg *machGame) runMachine() {
 	states := mg.conGame.channel()
 	machColor := mg.humanColor.Opposite()
@@ -89,7 +85,6 @@ func (c *client) startMachineGame(data machNewData) {
 	machGames[mg.id] = mg
 	machMu.Unlock()
 
-	// TODO: Let's leave the timeout as an unimplemented feature
 	go func() {
 		states := mg.channel()
 		for s := range states {
