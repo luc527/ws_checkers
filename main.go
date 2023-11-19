@@ -13,7 +13,12 @@ var addr = flag.String("addr", ":8080", "http service address")
 func runServer() {
 	flag.Parse()
 
-	upgrader := websocket.Upgrader{}
+	// This is not secure, but I'm just trying to avoid cors problems when running on localhost
+	upgrader := websocket.Upgrader{
+		CheckOrigin: func(r *http.Request) bool {
+			return true
+		},
+	}
 
 	http.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
 		conn, err := upgrader.Upgrade(w, r, nil)

@@ -1,0 +1,10 @@
+version: '3'
+
+services:
+  ws:
+    restart: unless-stopped
+    container_name: ws_checkers
+    build:
+      dockerfile: ./Dockerfile
+    ports:
+      - 8080:8080
