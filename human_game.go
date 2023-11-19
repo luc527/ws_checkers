@@ -1,6 +1,8 @@
 package main
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"sync"
 
 	"github.com/google/uuid"
@@ -21,6 +23,14 @@ type humanGame struct {
 	id uuid.UUID
 	*conGame
 	tokens [2]string
+}
+
+func genToken() (string, error) {
+	bs := make([]byte, 36)
+	if _, err := rand.Read(bs); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(bs), nil
 }
 
 func newHumanGame() (*humanGame, error) {
@@ -94,7 +104,7 @@ func (c *client) connectToHumanGame(data humanConnectData) {
 	humanMu.Unlock()
 
 	if hg == nil {
-		c.errorf("game with id %v not found", data.Id)
+		c.errorf("human game not found (id %v)", data.Id)
 		return
 	}
 

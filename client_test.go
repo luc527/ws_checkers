@@ -2,12 +2,21 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"math/rand"
+	"strings"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 	"github.com/luc527/go_checkers/core"
 )
+
+func dumbClient() (*client, chan []byte, chan []byte) {
+	incoming := make(chan []byte)
+	outgoing := make(chan []byte)
+	return &client{incoming, outgoing}, incoming, outgoing
+}
 
 func tryJson(t *testing.T, m map[string]any) []byte {
 	bs, err := json.Marshal(m)
@@ -37,6 +46,7 @@ func tryRead(t *testing.T, conn *websocket.Conn) map[string]any {
 		t.Logf("failed to unmarshal message from websocket: %v", err)
 		t.FailNow()
 	}
+	fmt.Printf("-- read: %v", m)
 	return m
 }
 
@@ -232,6 +242,15 @@ func tryHumanConnected(t *testing.T, m map[string]any) humanConnectedMessage {
 	}
 }
 
+func tryError(t *testing.T, m map[string]any) stringMessage {
+	typ := tryType(t, "error", tryGet(t, m, "type").(string))
+	message := tryGet(t, m, "message").(string)
+	return stringMessage{
+		Type:    typ,
+		Message: message,
+	}
+}
+
 func TestHumanGame(t *testing.T) {
 	wcli, wconn := getClientAndConn(t)
 	go wcli.handleFirstMessage()
@@ -344,4 +363,153 @@ func TestUnknownType(t *testing.T) {
 		t.Log("invalid type, wanted error")
 		t.FailNow()
 	}
+}
+
+func TestMachInvalidId(t *testing.T) {
+	var cli *client
+	var conn *websocket.Conn
+	cli, conn = getClientAndConn(t)
+
+	go cli.handleFirstMessage()
+
+	trySend(t, conn, tryJson(t, map[string]any{
+		"type": "mach/new",
+		"data": map[string]any{
+			"humanColor":  "white",
+			"heuristic":   "WeightedCount",
+			"timeLimitMs": 100,
+		},
+	}))
+
+	// ignore
+	tryRead(t, conn)
+
+	// disconnect
+	conn.Close()
+
+	cli, conn = getClientAndConn(t)
+
+	go cli.handleFirstMessage()
+
+	randId, err := uuid.NewRandom()
+	if err != nil {
+		t.Log("failed to generated random uuid", err)
+		t.FailNow()
+	}
+
+	trySend(t, conn, tryJson(t, map[string]any{
+		"type": "mach/connect",
+		"data": map[string]any{
+			"id": randId,
+		},
+	}))
+
+	response := tryError(t, tryRead(t, conn))
+
+	if !strings.Contains(response.Message, "machine game not found") {
+		t.Logf("expected 'not found' error response, got %q", response.Message)
+		t.FailNow()
+	}
+}
+
+func TestHumanInvalidIdAndToken(t *testing.T) {
+	var cli *client
+	var conn *websocket.Conn
+
+	cli, conn = getClientAndConn(t)
+
+	go cli.handleFirstMessage()
+
+	trySend(t, conn, tryJson(t, map[string]any{
+		"type": "human/new",
+		"data": map[string]any{
+			"color": "white",
+		},
+	}))
+
+	created := tryHumanCreated(t, tryRead(t, conn))
+
+	// disconnect
+	conn.Close()
+
+	cli, conn = getClientAndConn(t)
+	go cli.handleFirstMessage()
+
+	// wrong id
+
+	randId, err := uuid.NewRandom()
+	if err != nil {
+		t.Log("failed to generated random uuid", err)
+		t.FailNow()
+	}
+
+	trySend(t, conn, tryJson(t, map[string]any{
+		"type": "human/connect",
+		"data": map[string]any{
+			"id": randId,
+		},
+	}))
+
+	response := tryError(t, tryRead(t, conn))
+
+	if !strings.Contains(response.Message, "human game not found") {
+		t.Logf("expected 'not found' error response, got %q", response.Message)
+		t.FailNow()
+	}
+
+	// right id, but invalid token
+
+	randToken, err := genToken()
+	if err != nil {
+		t.Logf("failed to generate token: %s", err)
+		t.FailNow()
+	}
+
+	trySend(t, conn, tryJson(t, map[string]any{
+		"type": "human/connect",
+		"data": map[string]any{
+			"id":    created.Id,
+			"token": randToken,
+		},
+	}))
+
+	response = tryError(t, tryRead(t, conn))
+
+	if !strings.Contains(response.Message, "invalid token") {
+		t.Logf("expected 'invalid token' error response, got %q", response.Message)
+		t.FailNow()
+	}
+}
+
+func TestHumanCreateAndReconnect(t *testing.T) {
+	var cli *client
+	var conn *websocket.Conn
+
+	cli, conn = getClientAndConn(t)
+	go cli.handleFirstMessage()
+
+	trySend(t, conn, tryJson(t, map[string]any{
+		"type": "human/new",
+		"data": map[string]any{
+			"color": "white",
+		},
+	}))
+
+	created := tryHumanCreated(t, tryRead(t, conn))
+
+	// disconnect
+	conn.Close()
+
+	cli, conn = getClientAndConn(t)
+	go cli.handleFirstMessage()
+
+	trySend(t, conn, tryJson(t, map[string]any{
+		"type": "human/connect",
+		"data": map[string]any{
+			"id":    created.Id,
+			"token": created.YourToken,
+		},
+	}))
+
+	tryHumanConnected(t, tryRead(t, conn))
 }
