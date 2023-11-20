@@ -2,13 +2,14 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"log"
 	"net/http"
 
 	"github.com/gorilla/websocket"
 )
 
-var addr = flag.String("addr", ":8080", "http service address")
+var port = flag.String("port", "8080", "http service port")
 
 func runServer() {
 	flag.Parse()
@@ -30,9 +31,14 @@ func runServer() {
 		cli.handleFirstMessage()
 	})
 
-	server := http.Server{Addr: *addr}
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintf(w, "hello world")
+	})
 
-	log.Printf("server running at %v\n", *addr)
+	addr := ":" + *port
+	server := http.Server{Addr: addr}
+
+	log.Printf("server running at %v\n", addr)
 	if err := server.ListenAndServe(); err != http.ErrServerClosed {
 		log.Fatalln(err)
 	}
