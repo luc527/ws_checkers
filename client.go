@@ -106,10 +106,10 @@ func (c *client) runPlayer(color core.Color, game *conGame) {
 }
 
 func (c *client) consumeGameStates(player core.Color, states <-chan gameState) {
+	defer close(c.outgoing)
 	for state := range states {
 		c.trySend(gameStateMessageFrom(state, player))
 		if state.result.Over() {
-			close(c.outgoing)
 			return
 		}
 	}

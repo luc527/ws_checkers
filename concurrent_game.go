@@ -3,7 +3,10 @@ package main
 import (
 	"errors"
 	"fmt"
+	"log"
 	"sync"
+	"sync/atomic"
+	"time"
 
 	"github.com/luc527/go_checkers/core"
 )
@@ -17,9 +20,10 @@ type gameState struct {
 }
 
 type conGame struct {
-	gameMu sync.Mutex
-	game   *core.Game
-	state  gameState
+	gameMu       sync.Mutex
+	game         *core.Game
+	state        gameState
+	lastActivity atomic.Int64
 
 	chansMu sync.Mutex
 	chans   map[chan gameState]bool
@@ -30,8 +34,14 @@ func newConGame() *conGame {
 		game:  core.NewGame(),
 		chans: make(map[chan gameState]bool),
 	}
+	g.registerActivity()
 	g.updateState()
 	return g
+}
+
+func (g *conGame) registerActivity() {
+	g.lastActivity.Store(time.Now().Unix())
+	log.Println("registering activity", time.Now())
 }
 
 func (g *conGame) updateState() {
@@ -68,6 +78,16 @@ func (g *conGame) detach(c chan gameState) {
 	}
 }
 
+func (g *conGame) detachAll() {
+	g.chansMu.Lock()
+	defer g.chansMu.Unlock()
+
+	for c := range g.chans {
+		delete(g.chans, c)
+		close(c)
+	}
+}
+
 func (g *conGame) update(s gameState) {
 	g.chansMu.Lock()
 	defer g.chansMu.Unlock()
@@ -96,6 +116,7 @@ func (g *conGame) doPlyInner(ply core.Ply) error {
 		return fmt.Errorf("do ply: %v", err)
 	}
 	g.updateState()
+	g.registerActivity()
 	go g.update(g.state)
 	return nil
 }

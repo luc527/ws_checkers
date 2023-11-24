@@ -3,7 +3,9 @@ package main
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"log"
 	"sync"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/luc527/go_checkers/core"
@@ -73,14 +75,35 @@ func (c *client) startHumanGame(data humanNewData) {
 	humanGames[hg.id] = hg
 	humanMu.Unlock()
 
+	ticker := time.NewTicker(30 * time.Second)
+
 	go func() {
 		states := hg.conGame.channel()
 		for s := range states {
 			if s.result.Over() {
+				ticker.Stop()
+
 				humanMu.Lock()
 				delete(humanGames, hg.id)
 				humanMu.Unlock()
 				hg.conGame.detach(states)
+			}
+		}
+	}()
+
+	go func() {
+		for range ticker.C {
+			lastActivity := time.Unix(hg.lastActivity.Load(), 0)
+			idleDuration := time.Since(lastActivity)
+			log.Printf("human game idle for %v (id %v)", idleDuration, hg.id)
+			if idleDuration > 2*time.Minute {
+				log.Printf("closing game (id %v)", hg.id)
+				hg.detachAll()
+
+				humanMu.Lock()
+				delete(humanGames, hg.id)
+				humanMu.Unlock()
+				break
 			}
 		}
 	}()
