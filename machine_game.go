@@ -81,18 +81,43 @@ func (c *client) startMachineGame(data machNewData) {
 		return
 	}
 
+	log.Printf("starting machine game (id %v)", mg.id)
+
 	machMu.Lock()
 	machGames[mg.id] = mg
 	machMu.Unlock()
+
+	ticker := time.NewTicker(30 * time.Second)
 
 	go func() {
 		states := mg.channel()
 		for s := range states {
 			if s.result.Over() {
+				log.Printf("machine game ended (id %v)", mg.id)
+				ticker.Stop()
+				mg.detach(states)
+
 				machMu.Lock()
 				delete(machGames, mg.id)
 				machMu.Unlock()
-				mg.detach(states)
+			}
+		}
+	}()
+
+	go func() {
+		for range ticker.C {
+			lastActivity := time.Unix(mg.lastActivity.Load(), 0)
+			idleDuration := time.Since(lastActivity)
+			log.Printf("game is idle for %v (id %v)", idleDuration, mg.id)
+			if idleDuration > 2*time.Minute {
+				log.Printf("closing game (id %v)", mg.id)
+				mg.detachAll()
+
+				machMu.Lock()
+				delete(machGames, mg.id)
+				machMu.Unlock()
+
+				break
 			}
 		}
 	}()
@@ -116,6 +141,8 @@ func (c *client) connectToMachineGame(data machConnectData) {
 		c.errorf("machine game not found (id %v)", data.Id)
 		return
 	}
+
+	log.Printf("connected to machine game (id %v)", data.Id)
 
 	human := mg.humanColor
 
