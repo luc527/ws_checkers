@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"sync"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/luc527/go_checkers/core"
@@ -73,17 +74,7 @@ func (c *client) startHumanGame(data humanNewData) {
 	humanGames[hg.id] = hg
 	humanMu.Unlock()
 
-	go func() {
-		states := hg.conGame.channel()
-		for s := range states {
-			if s.result.Over() {
-				humanMu.Lock()
-				delete(humanGames, hg.id)
-				humanMu.Unlock()
-				hg.conGame.detach(states)
-			}
-		}
-	}()
+	go monitorGame("human", hg.conGame, hg.id, 2*time.Minute, humanGames, &humanMu)
 
 	hg.tokens[whiteColor] = whiteToken
 	hg.tokens[blackColor] = blackToken

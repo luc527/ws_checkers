@@ -4,7 +4,10 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"sync/atomic"
+	"time"
 
+	"github.com/google/uuid"
 	"github.com/luc527/go_checkers/core"
 )
 
@@ -17,9 +20,10 @@ type gameState struct {
 }
 
 type conGame struct {
-	gameMu sync.Mutex
-	game   *core.Game
-	state  gameState
+	gameMu       sync.Mutex
+	game         *core.Game
+	state        gameState
+	lastActivity atomic.Int64
 
 	chansMu sync.Mutex
 	chans   map[chan gameState]bool
@@ -30,8 +34,14 @@ func newConGame() *conGame {
 		game:  core.NewGame(),
 		chans: make(map[chan gameState]bool),
 	}
+	g.registerActivity()
 	g.updateState()
 	return g
+}
+
+func (g *conGame) registerActivity() {
+	g.lastActivity.Store(time.Now().Unix())
+	// log.Println("registering activity", time.Now())
 }
 
 func (g *conGame) updateState() {
@@ -68,6 +78,16 @@ func (g *conGame) detach(c chan gameState) {
 	}
 }
 
+func (g *conGame) detachAll() {
+	g.chansMu.Lock()
+	defer g.chansMu.Unlock()
+
+	for c := range g.chans {
+		delete(g.chans, c)
+		close(c)
+	}
+}
+
 func (g *conGame) update(s gameState) {
 	g.chansMu.Lock()
 	defer g.chansMu.Unlock()
@@ -96,6 +116,7 @@ func (g *conGame) doPlyInner(ply core.Ply) error {
 		return fmt.Errorf("do ply: %v", err)
 	}
 	g.updateState()
+	g.registerActivity()
 	go g.update(g.state)
 	return nil
 }
@@ -127,4 +148,45 @@ func (g *conGame) doIndexPly(player core.Color, version int, index int) error {
 		return err
 	}
 	return nil
+}
+
+func monitorGame[T any](mode string, g *conGame, id uuid.UUID, timeout time.Duration, games map[uuid.UUID]T, mu *sync.Mutex) {
+	ticker := time.NewTicker(30 * time.Second)
+
+	go func() {
+		states := g.channel()
+		for s := range states {
+			if s.result.Over() {
+				ticker.Stop()
+				mu.Lock()
+				delete(games, id)
+				mu.Unlock()
+				g.detach(states)
+
+				go notifyWebhooksGameEnded(mode, id, s)
+
+				break
+			}
+		}
+	}()
+
+	go func() {
+		for range ticker.C {
+			lastActivity := time.Unix(g.lastActivity.Load(), 0)
+			idleDuration := time.Since(lastActivity)
+			// log.Printf("game idle for %v (id %v)", idleDuration, id)
+			if idleDuration > 2*time.Minute {
+				// log.Printf("closing game (id %v)", id)
+				g.detachAll()
+
+				mu.Lock()
+				delete(games, id)
+				mu.Unlock()
+
+				go notifyWebhooksGameEnded(mode, id, g.current())
+
+				break
+			}
+		}
+	}()
 }

@@ -38,21 +38,31 @@ func newMachGame(searcher minimax.Searcher, humanColor core.Color) (*machGame, e
 }
 
 func (mg *machGame) runMachine() {
-	states := mg.conGame.channel()
-	machColor := mg.humanColor.Opposite()
+	if !mg.machineHandleState(mg.current()) {
+		return
+	}
+
+	states := mg.channel()
 	for s := range states {
-		if s.toPlay != machColor {
-			continue
-		}
-		if s.result.Over() {
+		if !mg.machineHandleState(s) {
 			mg.conGame.detach(states)
-			return
-		}
-		ply := mg.searcher.Search(mg.conGame.game.Copy())
-		if err := mg.conGame.doGivenPly(machColor, s.version, ply); err != nil {
-			log.Printf("failed to do machine ply: %v", err)
 		}
 	}
+}
+
+func (mg *machGame) machineHandleState(s gameState) bool {
+	machColor := mg.humanColor.Opposite()
+	if s.toPlay != machColor {
+		return true
+	}
+	if s.result.Over() {
+		return false
+	}
+	ply := mg.searcher.Search(mg.game.Copy())
+	if err := mg.doGivenPly(machColor, s.version, ply); err != nil {
+		log.Printf("failed to do machine ply: %v", err)
+	}
+	return true
 }
 
 func (c *client) startMachineGame(data machNewData) {
@@ -81,21 +91,13 @@ func (c *client) startMachineGame(data machNewData) {
 		return
 	}
 
+	log.Printf("starting machine game (id %v)", mg.id)
+
 	machMu.Lock()
 	machGames[mg.id] = mg
 	machMu.Unlock()
 
-	go func() {
-		states := mg.channel()
-		for s := range states {
-			if s.result.Over() {
-				machMu.Lock()
-				delete(machGames, mg.id)
-				machMu.Unlock()
-				mg.detach(states)
-			}
-		}
-	}()
+	go monitorGame("machine", mg.conGame, mg.id, 2*time.Minute, machGames, &machMu)
 
 	c.trySend(machConnectedMessageFrom(human, mg.id))
 	c.trySend(gameStateMessageFrom(mg.current(), human))
@@ -116,6 +118,8 @@ func (c *client) connectToMachineGame(data machConnectData) {
 		c.errorf("machine game not found (id %v)", data.Id)
 		return
 	}
+
+	log.Printf("connected to machine game (id %v)", data.Id)
 
 	human := mg.humanColor
 

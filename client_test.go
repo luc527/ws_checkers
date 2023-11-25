@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
 	"math/rand"
 	"strings"
 	"testing"
@@ -46,7 +45,6 @@ func tryRead(t *testing.T, conn *websocket.Conn) map[string]any {
 		t.Logf("failed to unmarshal message from websocket: %v", err)
 		t.FailNow()
 	}
-	fmt.Printf("-- read: %v", m)
 	return m
 }
 
@@ -206,7 +204,7 @@ func TestMachGameConnect(t *testing.T) {
 		tryMachConnected(t, tryRead(t, conn))
 		tryState(t, tryRead(t, conn))
 
-		close(cli.outgoing)
+		conn.Close()
 		assertClosed(t, cli)
 	}
 

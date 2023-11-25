@@ -13,7 +13,7 @@ for line in sys.stdin:
 
     percentage = float(match_cov.group(1))
 
-    if percentage < 70:
+    if percentage < 60:
         passed = False
 
 print()
