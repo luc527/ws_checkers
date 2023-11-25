@@ -38,21 +38,31 @@ func newMachGame(searcher minimax.Searcher, humanColor core.Color) (*machGame, e
 }
 
 func (mg *machGame) runMachine() {
-	states := mg.conGame.channel()
-	machColor := mg.humanColor.Opposite()
+	if !mg.machineHandleState(mg.current()) {
+		return
+	}
+
+	states := mg.channel()
 	for s := range states {
-		if s.toPlay != machColor {
-			continue
-		}
-		if s.result.Over() {
+		if !mg.machineHandleState(s) {
 			mg.conGame.detach(states)
-			return
-		}
-		ply := mg.searcher.Search(mg.conGame.game.Copy())
-		if err := mg.conGame.doGivenPly(machColor, s.version, ply); err != nil {
-			log.Printf("failed to do machine ply: %v", err)
 		}
 	}
+}
+
+func (mg *machGame) machineHandleState(s gameState) bool {
+	machColor := mg.humanColor.Opposite()
+	if s.toPlay != machColor {
+		return true
+	}
+	if s.result.Over() {
+		return false
+	}
+	ply := mg.searcher.Search(mg.game.Copy())
+	if err := mg.doGivenPly(machColor, s.version, ply); err != nil {
+		log.Printf("failed to do machine ply: %v", err)
+	}
+	return true
 }
 
 func (c *client) startMachineGame(data machNewData) {
@@ -87,40 +97,7 @@ func (c *client) startMachineGame(data machNewData) {
 	machGames[mg.id] = mg
 	machMu.Unlock()
 
-	ticker := time.NewTicker(30 * time.Second)
-
-	go func() {
-		states := mg.channel()
-		for s := range states {
-			if s.result.Over() {
-				log.Printf("machine game ended (id %v)", mg.id)
-				ticker.Stop()
-				mg.detach(states)
-
-				machMu.Lock()
-				delete(machGames, mg.id)
-				machMu.Unlock()
-			}
-		}
-	}()
-
-	go func() {
-		for range ticker.C {
-			lastActivity := time.Unix(mg.lastActivity.Load(), 0)
-			idleDuration := time.Since(lastActivity)
-			log.Printf("game is idle for %v (id %v)", idleDuration, mg.id)
-			if idleDuration > 2*time.Minute {
-				log.Printf("closing game (id %v)", mg.id)
-				mg.detachAll()
-
-				machMu.Lock()
-				delete(machGames, mg.id)
-				machMu.Unlock()
-
-				break
-			}
-		}
-	}()
+	go monitorGame("machine", mg.conGame, mg.id, 2*time.Minute, machGames, &machMu)
 
 	c.trySend(machConnectedMessageFrom(human, mg.id))
 	c.trySend(gameStateMessageFrom(mg.current(), human))

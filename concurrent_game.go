@@ -3,11 +3,11 @@ package main
 import (
 	"errors"
 	"fmt"
-	"log"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/luc527/go_checkers/core"
 )
 
@@ -41,7 +41,7 @@ func newConGame() *conGame {
 
 func (g *conGame) registerActivity() {
 	g.lastActivity.Store(time.Now().Unix())
-	log.Println("registering activity", time.Now())
+	// log.Println("registering activity", time.Now())
 }
 
 func (g *conGame) updateState() {
@@ -148,4 +148,45 @@ func (g *conGame) doIndexPly(player core.Color, version int, index int) error {
 		return err
 	}
 	return nil
+}
+
+func monitorGame[T any](mode string, g *conGame, id uuid.UUID, timeout time.Duration, games map[uuid.UUID]T, mu *sync.Mutex) {
+	ticker := time.NewTicker(30 * time.Second)
+
+	go func() {
+		states := g.channel()
+		for s := range states {
+			if s.result.Over() {
+				ticker.Stop()
+				mu.Lock()
+				delete(games, id)
+				mu.Unlock()
+				g.detach(states)
+
+				go notifyWebhooksGameEnded(mode, id, s)
+
+				break
+			}
+		}
+	}()
+
+	go func() {
+		for range ticker.C {
+			lastActivity := time.Unix(g.lastActivity.Load(), 0)
+			idleDuration := time.Since(lastActivity)
+			// log.Printf("game idle for %v (id %v)", idleDuration, id)
+			if idleDuration > 2*time.Minute {
+				// log.Printf("closing game (id %v)", id)
+				g.detachAll()
+
+				mu.Lock()
+				delete(games, id)
+				mu.Unlock()
+
+				go notifyWebhooksGameEnded(mode, id, g.current())
+
+				break
+			}
+		}
+	}()
 }

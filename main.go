@@ -1,12 +1,14 @@
 package main
 
 import (
+	"crypto/rand"
 	"flag"
 	"fmt"
 	"html/template"
 	"log"
 	"net/http"
 
+	"github.com/google/uuid"
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
 )
@@ -21,11 +23,9 @@ var upgrader = websocket.Upgrader{
 }
 
 func main() {
+	uuid.SetRand(rand.Reader)
 	runServer()
 }
-
-// TODO mutex around it to allow the server to call them
-var webhooks = make(map[string]bool)
 
 func runServer() {
 	flag.Parse()
@@ -34,9 +34,9 @@ func runServer() {
 
 	r.HandleFunc("/ws", handleWebsocketRequest).Methods("GET")
 
-	r.HandleFunc("/webhook", handleWebhooksRequest).Methods("GET")
-	r.HandleFunc("/webhook", registerWebhook).Methods("PUT")
-	r.HandleFunc("/webhook", deleteWebhook).Methods("DELETE")
+	r.HandleFunc("/webhook", handleGetWebhooks).Methods("GET")
+	r.HandleFunc("/webhook", handlePostWebhook).Methods("POST")
+	r.HandleFunc("/webhook", handleDeleteWebhook).Methods("DELETE")
 
 	r.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "hello world!")
@@ -107,7 +107,7 @@ var webhooksTemplate = template.Must(template.New("all").Parse(`
   <div style="width: 70%; margin: auto">
     <div style="display: flex; flex-diretion: row">
       <div style="flex: 1">
-        <form hx-put="/webhook" hx-target="#webhooks" hx-swap="innerHTML">
+        <form hx-post="/webhook" hx-target="#webhooks" hx-swap="innerHTML">
           <p>Add Webhook</p>
           <label>URL</label>
           <input name="url" type="url" />
@@ -124,33 +124,33 @@ var webhooksTemplate = template.Must(template.New("all").Parse(`
 {{end}}
 `))
 
-func handleWebhooksRequest(w http.ResponseWriter, r *http.Request) {
-	if err := webhooksTemplate.ExecuteTemplate(w, "base", webhooks); err != nil {
+func handleGetWebhooks(w http.ResponseWriter, r *http.Request) {
+	if urls, err := getWebhooks(); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		fmt.Fprintf(w, "failed to write index: %v", err)
+	} else if err := webhooksTemplate.ExecuteTemplate(w, "base", urls); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
 	}
 }
 
-func registerWebhook(w http.ResponseWriter, r *http.Request) {
+func handlePostWebhook(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
-		fmt.Fprintf(w, "invalid form: %v", err)
 	}
 	url := r.Form.Get("url")
-	log.Printf("registering webhook with url %v", url)
-	webhooks[url] = true
+	if err := addWebhook(url); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+	}
 	if err := webhooksTemplate.ExecuteTemplate(w, "table", webhooks); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		fmt.Fprintln(w, "failed to print table")
 	}
 }
 
-func deleteWebhook(w http.ResponseWriter, r *http.Request) {
+func handleDeleteWebhook(w http.ResponseWriter, r *http.Request) {
 	url := r.URL.Query().Get("url")
-	log.Printf("deleting webhook with url %v", url)
-	delete(webhooks, url)
+	if err := deleteWebhook(url); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+	}
 	if err := webhooksTemplate.ExecuteTemplate(w, "table", webhooks); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		fmt.Fprintf(w, "failed to print table: %v", err)
 	}
 }
