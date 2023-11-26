@@ -11,29 +11,6 @@ import (
 	"github.com/luc527/go_checkers/core"
 )
 
-// TODO: boltdb instead
-var webhooks = make(map[string]bool)
-
-func getWebhooks() ([]string, error) {
-	a := make([]string, len(webhooks))
-	i := 0
-	for url := range webhooks {
-		a[i] = url
-		i++
-	}
-	return a, nil
-}
-
-func addWebhook(url string) error {
-	webhooks[url] = true
-	return nil
-}
-
-func deleteWebhook(url string) error {
-	delete(webhooks, url)
-	return nil
-}
-
 type webhookRequestBody struct {
 	Mode      string          `json:"mode"`
 	Id        uuid.UUID       `json:"id"`
@@ -41,14 +18,18 @@ type webhookRequestBody struct {
 	Timestamp int64           `json:"timestamp"`
 }
 
-func notifyWebhooksGameEnded(mode string, id uuid.UUID, state gameState) {
-	log.Println("-- notifying webhooks")
-
-	urls, err := getWebhooks()
+func notifyWebhooks(mode string, id uuid.UUID, state gameState) {
+	urls, err := getWebhooks(db)
 	if err != nil {
-		log.Printf("failed to notify webhooks, couldn't get'em: %v", err)
+		log.Printf("failed to get webhooks: %v", err)
 		return
 	}
+	notifyWebhooksImpl(mode, id, urls, state)
+}
+
+func notifyWebhooksReal(mode string, id uuid.UUID, urls []string, state gameState) {
+	log.Println("-- notifying webhooks")
+
 	body := webhookRequestBody{
 		Mode:      mode,
 		Id:        id,

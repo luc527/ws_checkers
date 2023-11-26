@@ -13,7 +13,7 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-var port = flag.String("port", "8088", "http service port")
+var port = flag.String("port", "88", "http service port")
 
 var upgrader = websocket.Upgrader{
 	// This is not secure, but I'm just trying to avoid cors problems when running on localhost
@@ -24,6 +24,7 @@ var upgrader = websocket.Upgrader{
 
 func main() {
 	uuid.SetRand(rand.Reader)
+
 	runServer()
 }
 
@@ -61,8 +62,6 @@ func handleWebsocketRequest(w http.ResponseWriter, r *http.Request) {
 	cli.handleFirstMessage()
 }
 
-// TODO persist webhooks in boltdb
-
 var webhooksTemplate = template.Must(template.New("all").Parse(`
 {{define "table"}}
 <table id="webhooks-table">
@@ -70,11 +69,11 @@ var webhooksTemplate = template.Must(template.New("all").Parse(`
     <td>URL</td>
     <td></td>
   </tr>
-  {{range $k, $v := .}}
+  {{range .}}
     <tr>
-      <td>{{$k}}</td>
+      <td>{{.}}</td>
       <td>
-        <button hx-delete="/webhook?url={{$k}}" hx-target="#webhooks-table" hx-swap="outerHTML">
+        <button hx-delete="/webhook?url={{.}}" hx-target="#webhooks-table" hx-swap="outerHTML">
           Delete
         </button>
       </td>
@@ -125,7 +124,7 @@ var webhooksTemplate = template.Must(template.New("all").Parse(`
 `))
 
 func handleGetWebhooks(w http.ResponseWriter, r *http.Request) {
-	if urls, err := getWebhooks(); err != nil {
+	if urls, err := getWebhooks(db); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 	} else if err := webhooksTemplate.ExecuteTemplate(w, "base", urls); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -137,20 +136,18 @@ func handlePostWebhook(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 	}
 	url := r.Form.Get("url")
-	if err := addWebhook(url); err != nil {
+	if urls, err := addWebhook(db, url); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-	}
-	if err := webhooksTemplate.ExecuteTemplate(w, "table", webhooks); err != nil {
+	} else if err := webhooksTemplate.ExecuteTemplate(w, "table", urls); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 	}
 }
 
 func handleDeleteWebhook(w http.ResponseWriter, r *http.Request) {
 	url := r.URL.Query().Get("url")
-	if err := deleteWebhook(url); err != nil {
+	if urls, err := deleteWebhook(db, url); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-	}
-	if err := webhooksTemplate.ExecuteTemplate(w, "table", webhooks); err != nil {
+	} else if err := webhooksTemplate.ExecuteTemplate(w, "table", urls); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 	}
 }

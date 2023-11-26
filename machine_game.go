@@ -91,8 +91,6 @@ func (c *client) startMachineGame(data machNewData) {
 		return
 	}
 
-	log.Printf("starting machine game (id %v)", mg.id)
-
 	machMu.Lock()
 	machGames[mg.id] = mg
 	machMu.Unlock()
@@ -118,8 +116,6 @@ func (c *client) connectToMachineGame(data machConnectData) {
 		c.errorf("machine game not found (id %v)", data.Id)
 		return
 	}
-
-	log.Printf("connected to machine game (id %v)", data.Id)
 
 	human := mg.humanColor
 
