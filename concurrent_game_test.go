@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"math/rand"
 	"slices"
 	"testing"
@@ -103,7 +102,6 @@ func TestGetStoredGame(t *testing.T) {
 
 		eq := slices.EqualFunc(want, got, func(u1, u2 uuid.UUID) bool {
 			cmp := compareBytes(u1[:], u2[:])
-			fmt.Printf("comparing %v and %v, result: %v\n", u1, u2, cmp)
 			return cmp == 0
 		})
 		if !eq {
