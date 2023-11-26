@@ -95,7 +95,7 @@ func (c *client) startMachineGame(data machNewData) {
 	machGames[mg.id] = mg
 	machMu.Unlock()
 
-	go monitorGame("machine", mg.conGame, mg.id, 2*time.Minute, machGames, &machMu)
+	go monitorGame(machineMode, mg.conGame, mg.id, 2*time.Minute, machGames, &machMu)
 
 	c.trySend(machConnectedMessageFrom(human, mg.id))
 	c.trySend(gameStateMessageFrom(mg.current(), human))

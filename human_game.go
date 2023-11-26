@@ -74,7 +74,7 @@ func (c *client) startHumanGame(data humanNewData) {
 	humanGames[hg.id] = hg
 	humanMu.Unlock()
 
-	go monitorGame("human", hg.conGame, hg.id, 2*time.Minute, humanGames, &humanMu)
+	go monitorGame(humanMode, hg.conGame, hg.id, 2*time.Minute, humanGames, &humanMu)
 
 	hg.tokens[whiteColor] = whiteToken
 	hg.tokens[blackColor] = blackToken

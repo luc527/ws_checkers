@@ -2,7 +2,6 @@ import sys
 import re
 
 passed = True
-packages_below = []
 
 for line in sys.stdin:
     line = line.rstrip()

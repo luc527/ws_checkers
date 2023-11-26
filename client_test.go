@@ -11,12 +11,6 @@ import (
 	"github.com/luc527/go_checkers/core"
 )
 
-func dumbClient() (*client, chan []byte, chan []byte) {
-	incoming := make(chan []byte)
-	outgoing := make(chan []byte)
-	return &client{incoming, outgoing}, incoming, outgoing
-}
-
 func tryJson(t *testing.T, m map[string]any) []byte {
 	bs, err := json.Marshal(m)
 	if err != nil {
