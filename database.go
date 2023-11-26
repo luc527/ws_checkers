@@ -111,7 +111,6 @@ func gameKey(mode gameMode, id uuid.UUID) ([]byte, error) {
 }
 
 func savePlyHistory(db store, mode gameMode, id uuid.UUID, history []core.Ply) error {
-	log.Printf("saving ply history (mode %v, id %v)", mode, id)
 	err := db.update(func(tx transaction) error {
 		key, err := gameKey(mode, id)
 		if err != nil {

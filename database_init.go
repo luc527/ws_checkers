@@ -8,7 +8,6 @@ import (
 	"slices"
 
 	"github.com/boltdb/bolt"
-	"github.com/google/uuid"
 )
 
 type store interface {
@@ -28,19 +27,15 @@ type cursor interface {
 	next() ([]byte, []byte)
 }
 
-type notifyWebhooksFunc func(mode gameMode, id uuid.UUID, urls []string, state gameState)
-
 // Initialization
 
 var db store
-var notifyWebhooksImpl notifyWebhooksFunc
 
 func init() {
 	testing := os.Getenv("CHECKERS_TESTING") == "1"
 	if testing {
 		log.Println("initializing test database")
 		db = &memStore{}
-		notifyWebhooksImpl = notifyWebhooksDummy
 	} else {
 		path := os.Getenv("DB_PATH")
 		if path == "" {
@@ -62,8 +57,6 @@ func init() {
 		} else {
 			log.Println("database initialized successfully")
 		}
-
-		notifyWebhooksImpl = notifyWebhooksReal
 	}
 }
 
@@ -238,10 +231,4 @@ func (ms *memStore) update(fn func(transaction) error) error {
 
 func (ms *memStore) view(fn func(transaction) error) error {
 	return fn(ms)
-}
-
-func notifyWebhooksDummy(mode gameMode, id uuid.UUID, urls []string, state gameState) {
-	for _, url := range urls {
-		log.Printf("(dummy) notifying %v (game result: %v, game id: %v)", url, state.result, id)
-	}
 }
