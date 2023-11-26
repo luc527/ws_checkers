@@ -8,13 +8,12 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/boltdb/bolt"
 	"github.com/google/uuid"
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
 )
 
-var port = flag.String("port", "8088", "http service port")
+var port = flag.String("port", "88", "http service port")
 
 var upgrader = websocket.Upgrader{
 	// This is not secure, but I'm just trying to avoid cors problems when running on localhost
@@ -25,18 +24,6 @@ var upgrader = websocket.Upgrader{
 
 func main() {
 	uuid.SetRand(rand.Reader)
-
-	err := db.Update(func(tx *bolt.Tx) error {
-		if _, err := tx.CreateBucketIfNotExists([]byte("checkers")); err != nil {
-			return err
-		}
-		return nil
-	})
-	if err != nil {
-		log.Fatalf("failed to initialize the database: %v", err)
-	} else {
-		log.Println("database initialized successfully")
-	}
 
 	runServer()
 }

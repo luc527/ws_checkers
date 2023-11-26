@@ -7,7 +7,7 @@ services:
     build:
       dockerfile: ./Dockerfile
     ports:
-      - 8088:8088
+      - 88:88
     volumes:
       - ./checkers.db:/go/bin/checkers.db
     environment:

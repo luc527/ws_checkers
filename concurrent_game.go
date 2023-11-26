@@ -163,7 +163,7 @@ func monitorGame[T any](mode string, g *conGame, id uuid.UUID, timeout time.Dura
 				mu.Unlock()
 				g.detach(states)
 
-				go notifyWebhooksGameEnded(mode, id, s)
+				go notifyWebhooks(mode, id, s)
 
 				break
 			}
@@ -183,7 +183,7 @@ func monitorGame[T any](mode string, g *conGame, id uuid.UUID, timeout time.Dura
 				delete(games, id)
 				mu.Unlock()
 
-				go notifyWebhooksGameEnded(mode, id, g.current())
+				go notifyWebhooks(mode, id, g.current())
 
 				break
 			}
