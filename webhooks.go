@@ -18,7 +18,7 @@ type webhookRequestBody struct {
 	Timestamp int64           `json:"timestamp"`
 }
 
-func notifyWebhooks(mode string, id uuid.UUID, state gameState) {
+func notifyWebhooks(mode gameMode, id uuid.UUID, state gameState) {
 	urls, err := getWebhooks(db)
 	if err != nil {
 		log.Printf("failed to get webhooks: %v", err)
@@ -27,11 +27,11 @@ func notifyWebhooks(mode string, id uuid.UUID, state gameState) {
 	notifyWebhooksImpl(mode, id, urls, state)
 }
 
-func notifyWebhooksReal(mode string, id uuid.UUID, urls []string, state gameState) {
+func notifyWebhooksReal(mode gameMode, id uuid.UUID, urls []string, state gameState) {
 	log.Println("-- notifying webhooks")
 
 	body := webhookRequestBody{
-		Mode:      mode,
+		Mode:      mode.String(),
 		Id:        id,
 		Result:    state.result,
 		Timestamp: time.Now().UnixMilli(),

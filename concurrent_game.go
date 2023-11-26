@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -25,14 +26,18 @@ type conGame struct {
 	state        gameState
 	lastActivity atomic.Int64
 
+	plyHistoryMu sync.Mutex
+	plyHistory   []core.Ply
+
 	chansMu sync.Mutex
 	chans   map[chan gameState]bool
 }
 
 func newConGame() *conGame {
 	g := &conGame{
-		game:  core.NewGame(),
-		chans: make(map[chan gameState]bool),
+		game:       core.NewGame(),
+		chans:      make(map[chan gameState]bool),
+		plyHistory: make([]core.Ply, 0, 20),
 	}
 	g.registerActivity()
 	g.updateState()
@@ -88,7 +93,7 @@ func (g *conGame) detachAll() {
 	}
 }
 
-func (g *conGame) update(s gameState) {
+func (g *conGame) notify(s gameState) {
 	g.chansMu.Lock()
 	defer g.chansMu.Unlock()
 
@@ -115,9 +120,14 @@ func (g *conGame) doPlyInner(ply core.Ply) error {
 	if _, err := g.game.DoPly(ply); err != nil {
 		return fmt.Errorf("do ply: %v", err)
 	}
+
+	g.plyHistoryMu.Lock()
+	g.plyHistory = append(g.plyHistory, ply)
+	g.plyHistoryMu.Unlock()
+
 	g.updateState()
 	g.registerActivity()
-	go g.update(g.state)
+	go g.notify(g.state)
 	return nil
 }
 
@@ -150,7 +160,13 @@ func (g *conGame) doIndexPly(player core.Color, version int, index int) error {
 	return nil
 }
 
-func monitorGame[T any](mode string, g *conGame, id uuid.UUID, timeout time.Duration, games map[uuid.UUID]T, mu *sync.Mutex) {
+func (g *conGame) copyPlyHistory() []core.Ply {
+	g.plyHistoryMu.Lock()
+	defer g.plyHistoryMu.Unlock()
+	return slices.Clone(g.plyHistory)
+}
+
+func monitorGame[T any](mode gameMode, g *conGame, id uuid.UUID, timeout time.Duration, games map[uuid.UUID]T, mu *sync.Mutex) {
 	ticker := time.NewTicker(30 * time.Second)
 
 	go func() {
@@ -158,12 +174,14 @@ func monitorGame[T any](mode string, g *conGame, id uuid.UUID, timeout time.Dura
 		for s := range states {
 			if s.result.Over() {
 				ticker.Stop()
+
 				mu.Lock()
 				delete(games, id)
 				mu.Unlock()
 				g.detach(states)
 
 				go notifyWebhooks(mode, id, s)
+				go savePlyHistory(db, mode, id, g.copyPlyHistory())
 
 				break
 			}
@@ -184,6 +202,7 @@ func monitorGame[T any](mode string, g *conGame, id uuid.UUID, timeout time.Dura
 				mu.Unlock()
 
 				go notifyWebhooks(mode, id, g.current())
+				go savePlyHistory(db, mode, id, g.copyPlyHistory())
 
 				break
 			}
