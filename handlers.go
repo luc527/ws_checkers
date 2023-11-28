@@ -159,13 +159,13 @@ func handleGetGame(w http.ResponseWriter, r *http.Request) {
 	board := new(core.Board)
 	core.PlaceInitialPieces(board)
 
-	states := make([]jsonGameState, 1+len(plyHistory))
+	states := make([]jsonGameState, 0, 1+len(plyHistory))
 
-	states[0] = jsonGameState{*board, nil}
-	for i, ply := range plyHistory {
+	for _, ply := range plyHistory {
+		states = append(states, jsonGameState{*board, ply})
 		core.PerformInstructions(board, ply)
-		states[i+1] = jsonGameState{*board, ply}
 	}
+	states = append(states, jsonGameState{*board, nil})
 
 	bytes, err := json.Marshal(states)
 	if err != nil {
