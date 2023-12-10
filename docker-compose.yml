@@ -9,6 +9,8 @@ services:
     ports:
       - 88:88
     volumes:
-      - ./checkers.db:/go/bin/checkers.db
+      - ./data:/go/bin/data
     environment:
-      DB_PATH: "/go/bin/checkers.db"
+      DB_PATH: "/go/bin/data/checkers.db"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"

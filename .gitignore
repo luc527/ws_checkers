@@ -1,4 +1,3 @@
 *.exe
 *.out
-checkers.db
-checkers.db.lock
+data

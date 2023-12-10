@@ -39,7 +39,7 @@ func init() {
 	} else {
 		path := os.Getenv("DB_PATH")
 		if path == "" {
-			path = "./checkers.db"
+			path = "./data/checkers.db"
 		}
 		log.Printf("opening database at %v", path)
 
